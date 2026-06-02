@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
+
+// Importaciones exactas basadas en tu estructura actual
 import 'modules/main_screen.dart'; 
-import 'modules/finanzas/views/detalle_liquidacion_view.dart';
-import 'modules/finanzas/views/historial_transito_view.dart';
-import 'modules/finanzas/views/historial_servicios_view.dart';
-
-import 'screens/chat_screen.dart';
-import 'screens/agenda_screen.dart';
-import 'screens/service_detail_screen.dart';
-import 'screens/messages_screen.dart';
-
-// 👇 Importaciones de Auth de Gadiel
-import 'screens/auth/login.dart';
-import 'screens/auth/register.dart';
-import 'screens/auth/documents.dart';
+import 'modules/finanzas/billetera_view.dart';
+import 'modules/finanzas/detalle_liquidacion_view.dart';
+import 'modules/finanzas/historial_transito_view.dart';
+import 'modules/finanzas/historial_servicios_view.dart';
+import 'modules/auth/login.dart';
+import 'modules/auth/register.dart';
+import 'modules/auth/documents.dart';
+import 'modules/usuario/agenda_screen.dart';
+import 'modules/usuario/messages_screen.dart';
+import 'modules/operaciones/chat_screen.dart';
+import 'modules/operaciones/service_detail_screen.dart';
 
 void main() {
   runApp(const JobHubApp());
@@ -29,39 +29,23 @@ class JobHubApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         primaryColor: const Color(0xFFE26112),
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE26112),
-          secondary: const Color(0xFF4A1502),
-        ),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE26112)),
       ),
-      // 👇 AHORA LA APP INICIA EN EL LOGIN
       initialRoute: '/login',
       routes: {
-        // --- RUTAS DE AUTH (Gadiel) ---
-        '/login': (context) => const Login(),
-        '/register': (context) => const Register(),
-        '/documents': (context) => const Documents(),
-
-        // --- NÚCLEO DE NAVEGACIÓN ---
-        '/': (context) => const MainScreen(), 
-
-        // --- RUTAS DE FINANZAS (Tuyas) ---
-        '/liquidacion': (context) => const DetalleLiquidacionView(), 
-        '/historial_transito': (context) => const HistorialTransitoView(),
-        '/historial': (context) => const HistorialServiciosView(), 
-
-        // --- RUTAS DE COLABORADORES ---
-        '/mensajes': (context) => const MessagesScreen(), 
-        '/chat': (context) => const ChatScreen(),
-        '/agenda': (context) => const AgendaScreen(),
-        '/detalle_servicio': (context) => const ServiceDetailScreen(
-          clientName: '',
-          serviceType: '',
-          time: '',
-          distance: '',
-          status: '',
-        ),
+        '/login': (context) => Login(),
+        '/register': (context) => Register(),
+        '/documents': (context) => Documents(),
+        '/': (context) => MainScreen(),
+        '/liquidacion': (context) => DetalleLiquidacionView(),
+        '/historial_transito': (context) => HistorialTransitoView(),
+        '/historial': (context) => HistorialServiciosView(),
+        '/mensajes': (context) => MessagesScreen(),
+        '/chat': (context) => ChatScreen(),
+        '/agenda': (context) => AgendaScreen(standalone: true),
+        '/detalle_servicio': (context) => ServiceDetailScreen(
+              clientName: '', serviceType: '', time: '', distance: '', status: '',
+            ),
       },
     );
   }

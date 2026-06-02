@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'conversation_screen.dart';
+import '../operaciones/conversation_screen.dart';
 
 class MessagesScreen extends StatelessWidget {
   final bool standalone;

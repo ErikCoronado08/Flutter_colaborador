@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'service_detail_screen.dart';
+import '../operaciones/service_detail_screen.dart';
 
 class AgendaScreen extends StatefulWidget {
   final bool standalone;

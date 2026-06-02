@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'finanzas/views/billetera_view.dart';
 
-// Importaciones de los demás módulos
-import '../screens/home_screen.dart';
-import '../screens/solicitudes_screen.dart'; // <-- La nueva integración estrella
-import '../screens/agenda_screen.dart';
-import '../screens/profile_screen.dart';
+import 'package:flutter/material.dart';
+import 'finanzas/billetera_view.dart';
+import 'usuario/home_screen.dart';
+import 'operaciones/solicitudes_screen.dart';
+import 'usuario/agenda_screen.dart';
+import 'usuario/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -17,13 +17,13 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // El arsenal completo de 5 pestañas para el trabajador
+  // Lista de pantallas ahora apuntando a los módulos organizados
   final List<Widget> _screens = [
-    const HomeScreen(),                         // 0: Inicio (Dashboard)
-    const SolicitudesScreen(),                  // 1: Solicitudes (Buscar trabajo)
-    const AgendaScreen(standalone: false),      // 2: Agenda (Calendario)
-    const BilleteraView(),                      // 3: Wallet (Finanzas)
-    const ProfileScreen(embed: true),           // 4: Perfil (Configuración)
+    const HomeScreen(),                    // 0: Inicio (Eduar)
+    const SolicitudesScreen(),             // 1: Solicitudes (Roxana)
+    const AgendaScreen(standalone: false), // 2: Agenda (Eduar)
+    const BilleteraView(),                 // 3: Wallet (Erick)
+    const ProfileScreen(embed: true),      // 4: Perfil (Eduar)
   ];
 
   @override
@@ -62,7 +62,6 @@ class _MainScreenState extends State<MainScreen> {
               activeIcon: Icon(Icons.home),
               label: 'Inicio',
             ),
-            // Pestaña de Solicitudes con el Badge rojo de Roxana
             BottomNavigationBarItem(
               icon: Badge(
                 label: Text('3', style: TextStyle(color: Colors.white, fontSize: 10)),

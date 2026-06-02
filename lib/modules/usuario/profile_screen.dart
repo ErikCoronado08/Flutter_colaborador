@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
+import '../../theme/app_colors.dart'; // IMPORTANTE: Ajustar para salir de 'usuario' e ir a 'theme'
 
 class ProfileScreen extends StatefulWidget {
   final bool embed;
