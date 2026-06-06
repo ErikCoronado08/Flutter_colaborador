@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-// Importaciones exactas basadas en tu estructura actual
+// Importaciones de módulos
 import 'modules/main_screen.dart'; 
 import 'modules/finanzas/billetera_view.dart';
 import 'modules/finanzas/detalle_liquidacion_view.dart';
@@ -15,6 +15,8 @@ import 'modules/operaciones/chat_screen.dart';
 import 'modules/operaciones/service_detail_screen.dart';
 
 void main() {
+  // Aseguramos la inicialización de los bindings de Flutter
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const JobHubApp());
 }
 
@@ -26,25 +28,39 @@ class JobHubApp extends StatelessWidget {
     return MaterialApp(
       title: 'JobHub Colaborador',
       debugShowCheckedModeBanner: false,
+      
+    
       theme: ThemeData(
         useMaterial3: true,
         primaryColor: const Color(0xFFE26112),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE26112)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFE26112),
+          primary: const Color(0xFFE26112),
+        ),
       ),
+      
+      // Ruta inicial
       initialRoute: '/login',
+      
+      // Definición de rutas
       routes: {
-        '/login': (context) => Login(),
-        '/register': (context) => Register(),
-        '/documents': (context) => Documents(),
-        '/': (context) => MainScreen(),
-        '/liquidacion': (context) => DetalleLiquidacionView(),
-        '/historial_transito': (context) => HistorialTransitoView(),
-        '/historial': (context) => HistorialServiciosView(),
-        '/mensajes': (context) => MessagesScreen(),
-        '/chat': (context) => ChatScreen(),
-        '/agenda': (context) => AgendaScreen(standalone: true),
-        '/detalle_servicio': (context) => ServiceDetailScreen(
-              clientName: '', serviceType: '', time: '', distance: '', status: '',
+        '/login': (context) => const Login(),
+        '/register': (context) => const Register(),
+        '/documents': (context) => const Documents(),
+        '/': (context) => const MainScreen(), // Cambiado de '/' a '/home' para evitar conflictos
+        '/billetera': (context) => const BilleteraView(),
+        '/liquidacion': (context) => const DetalleLiquidacionView(),
+        '/historial_transito': (context) => const HistorialTransitoView(),
+        '/historial': (context) => const HistorialServiciosView(),
+        '/mensajes': (context) => const MessagesScreen(),
+        '/chat': (context) => const ChatScreen(),
+        '/agenda': (context) => const AgendaScreen(standalone: true),
+        '/detalle_servicio': (context) => const ServiceDetailScreen(
+              clientName: 'N/A', 
+              serviceType: 'N/A', 
+              time: 'N/A', 
+              distance: 'N/A', 
+              status: 'N/A',
             ),
       },
     );
