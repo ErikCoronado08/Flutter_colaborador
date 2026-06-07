@@ -1,4 +1,7 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../theme/app_colors.dart';
 import '../operaciones/service_detail_screen.dart';
 
@@ -11,6 +14,52 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool disponible = true;
+  late SharedPreferences _prefs;
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePreferences();
+    _initializeNotifications();
+  }
+
+  Future<void> _initializePreferences() async {
+    _prefs = await SharedPreferences.getInstance();
+    setState(() {
+      disponible = _prefs.getBool('disponible') ?? true;
+    });
+  }
+
+  Future<void> _saveDisponibilidad(bool value) async {
+    await _prefs.setBool('disponible', value);
+  }
+
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+    await _notificationsPlugin.initialize(initSettings);
+  }
+
+  Future<void> _showReminderNotification() async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'jobhub_reminder',
+      'Recordatorios JobHub',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+    await _notificationsPlugin.show(
+      0,
+      'Recordatorio de servicio',
+      'Tienes servicios programados próximamente.',
+      platformDetails,
+    );
+  }
 
   final List<Map<String, String>> upcomingServices = [
     {
@@ -20,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'time': '10:00 AM',
       'distance': '2.5 km',
       'status': 'Confirmado',
+      'avatarUrl': 'https://picsum.photos/seed/mg/100',
     },
     {
       'initials': 'CL',
@@ -28,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'time': '5:30 PM',
       'distance': '8.1 km',
       'status': 'Pendiente',
+      'avatarUrl': 'https://picsum.photos/seed/cl/100',
     },
   ];
 
@@ -93,7 +144,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             IconButton(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay nuevas notificaciones.')));
+                _showReminderNotification();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recordatorio enviado.')));
               },
               icon: const Icon(Icons.notifications_none, color: AppColors.textPrimary, size: 26),
             ),
@@ -152,10 +204,13 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 8),
           Switch(
             value: disponible,
-            activeColor: AppColors.surface,
+            activeThumbColor: AppColors.surface,
             activeTrackColor: AppColors.success,
             inactiveTrackColor: const Color(0xFFD7D7DB),
-            onChanged: (value) => setState(() => disponible = value),
+            onChanged: (value) {
+              setState(() => disponible = value);
+              _saveDisponibilidad(value);
+            },
           ),
         ],
       ),
@@ -169,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFF8C3B), Color(0xFFFF5B22)]),
         boxShadow: [
-          BoxShadow(color: const Color(0xFFFF5B22).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+          BoxShadow(color: const Color(0xFFFF5B22).withValues(alpha: 77), blurRadius: 15, offset: const Offset(0, 8)),
         ],
       ),
       child: Column(
@@ -179,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Ganancias de hoy', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
-              Icon(Icons.trending_up, color: Colors.white.withOpacity(0.8), size: 20),
+              Icon(Icons.trending_up, color: Colors.white.withValues(alpha: 204), size: 20),
             ],
           ),
           const SizedBox(height: 12),
@@ -195,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Container(height: 1, color: Colors.white.withOpacity(0.2)),
+          Container(height: 1, color: Colors.white.withValues(alpha: 51)),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -209,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              Container(width: 1, height: 30, color: Colors.white.withOpacity(0.2)),
+              Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 51)),
               const SizedBox(width: 20),
               Expanded(
                 child: Column(
@@ -299,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 5), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           children: [
@@ -310,11 +365,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 26),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   alignment: Alignment.center,
-                  child: Text(service['initials'] ?? '', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CachedNetworkImage(
+                      imageUrl: service['avatarUrl'] ?? '',
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      errorWidget: (context, url, error) => Text(service['initials'] ?? '', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -330,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: confirmed ? AppColors.success.withOpacity(0.1) : AppColors.warning.withOpacity(0.1),
+                    color: confirmed ? AppColors.success.withValues(alpha: 26) : AppColors.warning.withValues(alpha: 26),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(

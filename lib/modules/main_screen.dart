@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-
-import 'package:flutter/material.dart';
 import 'finanzas/billetera_view.dart';
 import 'usuario/home_screen.dart';
 import 'operaciones/solicitudes_screen.dart';
@@ -37,7 +35,7 @@ class _MainScreenState extends State<MainScreen> {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 10),
               blurRadius: 10,
               offset: const Offset(0, -2),
             )
