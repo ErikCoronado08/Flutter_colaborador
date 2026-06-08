@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // <--- INTEGRACIÓN INTL
 
 class HistorialServiciosView extends StatefulWidget {
   const HistorialServiciosView({super.key});
@@ -8,12 +9,13 @@ class HistorialServiciosView extends StatefulWidget {
 }
 
 class _HistorialServiciosViewState extends State<HistorialServiciosView> {
+  // Cambiamos los Strings estáticos por datos reales (double y DateTime)
   final List<Map<String, dynamic>> _todosLosServicios = [
-    {'cliente': 'María González López', 'folio': '20033', 'fecha': '12 May • 14:30', 'monto': '\$320.00', 'rating': 5, 'estado': 'Completado'},
-    {'cliente': 'Juan Carlos Pérez', 'folio': '20034', 'fecha': '14 May • 10:15', 'monto': '\$150.00', 'rating': 4, 'estado': 'Completado'},
-    {'cliente': 'Roberto Gómez', 'folio': '20035', 'fecha': '15 May • 09:00', 'monto': '\$850.00', 'rating': 0, 'estado': 'Cancelado'},
-    {'cliente': 'Ana Sofía Martínez', 'folio': '20036', 'fecha': '18 May • 16:45', 'monto': '\$420.00', 'rating': 5, 'estado': 'Completado'},
-    {'cliente': 'Luis Hernández', 'folio': '20037', 'fecha': '20 May • 11:20', 'monto': '\$600.00', 'rating': 0, 'estado': 'En proceso'},
+    {'cliente': 'María González López', 'folio': '20033', 'fecha': DateTime(2026, 5, 12, 14, 30), 'monto': 320.00, 'rating': 5, 'estado': 'Completado'},
+    {'cliente': 'Juan Carlos Pérez', 'folio': '20034', 'fecha': DateTime(2026, 5, 14, 10, 15), 'monto': 150.00, 'rating': 4, 'estado': 'Completado'},
+    {'cliente': 'Roberto Gómez', 'folio': '20035', 'fecha': DateTime(2026, 5, 15, 9, 0), 'monto': 850.00, 'rating': 0, 'estado': 'Cancelado'},
+    {'cliente': 'Ana Sofía Martínez', 'folio': '20036', 'fecha': DateTime(2026, 5, 18, 16, 45), 'monto': 420.00, 'rating': 5, 'estado': 'Completado'},
+    {'cliente': 'Luis Hernández', 'folio': '20037', 'fecha': DateTime(2026, 5, 20, 11, 20), 'monto': 600.00, 'rating': 0, 'estado': 'En proceso'},
   ];
 
   List<Map<String, dynamic>> _serviciosFiltrados = [];
@@ -79,7 +81,14 @@ class _HistorialServiciosViewState extends State<HistorialServiciosView> {
   }
 
   Widget _buildServiceCard(Map<String, dynamic> item) {
-    // 👆 RECUPERAMOS LA NAVEGACIÓN A LIQUIDACIÓN
+    // ---> APLICACIÓN DE INTL PARA MONEDAS Y FECHAS <---
+    final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
+    final formatoFecha = DateFormat('dd MMM • HH:mm', 'es'); // Requiere que 'es' esté inicializado en main.dart
+    
+    final montoFormateado = formatoMoneda.format(item['monto']);
+    final fechaFormateada = formatoFecha.format(item['fecha'] as DateTime);
+    // ---> FIN APLICACIÓN <---
+
     return InkWell(
       onTap: () => Navigator.pushNamed(context, '/liquidacion'),
       borderRadius: BorderRadius.circular(20),
@@ -102,14 +111,16 @@ class _HistorialServiciosViewState extends State<HistorialServiciosView> {
                 children: [
                   Text(item['cliente'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 4),
-                  Text('Folio: ${item['folio']} • ${item['fecha']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  // Usamos la fecha formateada
+                  Text('Folio: ${item['folio']} • $fechaFormateada', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(item['monto'], style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
+                // Usamos el monto formateado
+                Text(montoFormateado, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
                 const SizedBox(height: 4),
                 Text(item['estado'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: item['estado'] == 'Completado' ? Colors.green : Colors.red)),
               ],

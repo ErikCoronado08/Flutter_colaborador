@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // <--- INTEGRACIÓN INTL
 
 class HistorialTransitoView extends StatelessWidget {
   const HistorialTransitoView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Simulamos transacciones en proceso
+    // Simulamos transacciones con tipos de datos reales (DateTime y double)
     final List<Map<String, dynamic>> transitos = [
-      {'servicio': 'Plomería - Jorge Torres', 'monto': '\$450.00', 'fecha': '28 May 2026', 'libera': '29 May, 14:32'},
-      {'servicio': 'Electricidad - Mariana Ríos', 'monto': '\$800.00', 'fecha': '24 May 2026', 'libera': '25 May, 09:15'},
+      {'servicio': 'Plomería - Jorge Torres', 'monto': 450.00, 'fecha': DateTime(2026, 5, 28), 'libera': DateTime(2026, 5, 29, 14, 32)},
+      {'servicio': 'Electricidad - Mariana Ríos', 'monto': 800.00, 'fecha': DateTime(2026, 5, 24), 'libera': DateTime(2026, 5, 25, 9, 15)},
     ];
 
     return Scaffold(
@@ -60,6 +61,16 @@ class HistorialTransitoView extends StatelessWidget {
   }
 
   Widget _buildTransitoCard(Map<String, dynamic> item) {
+    // ---> APLICACIÓN DE INTL PARA MONEDAS Y FECHAS <---
+    final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
+    final formatoFecha = DateFormat('dd MMM yyyy', 'es');
+    final formatoHora = DateFormat('dd MMM, HH:mm', 'es');
+
+    final montoFormateado = formatoMoneda.format(item['monto']);
+    final fechaOriginal = formatoFecha.format(item['fecha'] as DateTime);
+    final fechaLibera = formatoHora.format(item['libera'] as DateTime);
+    // ---> FIN APLICACIÓN <---
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -74,15 +85,15 @@ class HistorialTransitoView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(child: Text(item['servicio'], style: const TextStyle(fontWeight: FontWeight.bold))),
-              Text(item['monto'], style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
+              Text(montoFormateado, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
             ],
           ),
           const Divider(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Fecha: ${item['fecha']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              Text('Se libera: ${item['libera']}', style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
+              Text('Fecha: $fechaOriginal', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              Text('Se libera: $fechaLibera', style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ),
         ],

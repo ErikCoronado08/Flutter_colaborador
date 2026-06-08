@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart'; // <--- AGREGADO PARA EL IDIOMA DE LA AGENDA
 
-<<<<<<< Updated upstream
 // Importaciones de módulos
 import 'modules/main_screen.dart'; 
 import 'modules/finanzas/billetera_view.dart';
-=======
-// Importaciones exactas basadas en tu estructura actual
-import 'modules/main_screen.dart';
->>>>>>> Stashed changes
 import 'modules/finanzas/detalle_liquidacion_view.dart';
 import 'modules/finanzas/historial_transito_view.dart';
 import 'modules/finanzas/historial_servicios_view.dart';
@@ -19,9 +15,13 @@ import 'modules/usuario/messages_screen.dart';
 import 'modules/operaciones/chat_screen.dart';
 import 'modules/operaciones/service_detail_screen.dart';
 
-void main() {
+void main() async { // <--- CAMBIADO A ASYNC
   // Aseguramos la inicialización de los bindings de Flutter
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializamos el formato de fechas para la agenda (es = español)
+  await initializeDateFormatting('es', null); // <--- AGREGADO
+
   runApp(const JobHubApp());
 }
 
@@ -34,7 +34,6 @@ class JobHubApp extends StatelessWidget {
       title: 'JobHub Colaborador',
       debugShowCheckedModeBanner: false,
       
-    
       theme: ThemeData(
         useMaterial3: true,
         primaryColor: const Color(0xFFE26112),
@@ -52,7 +51,7 @@ class JobHubApp extends StatelessWidget {
         '/login': (context) => const Login(),
         '/register': (context) => const Register(),
         '/documents': (context) => const Documents(),
-        '/': (context) => const MainScreen(), // Cambiado de '/' a '/home' para evitar conflictos
+        '/': (context) => const MainScreen(),
         '/billetera': (context) => const BilleteraView(),
         '/liquidacion': (context) => const DetalleLiquidacionView(),
         '/historial_transito': (context) => const HistorialTransitoView(),

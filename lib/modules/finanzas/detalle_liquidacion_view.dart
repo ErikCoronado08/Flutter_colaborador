@@ -1,4 +1,9 @@
+import 'dart:typed_data'; // <--- Para manejar los bytes del archivo PDF
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart'; // <--- Plugin PDF
+import 'package:pdf/widgets.dart' as pw; // <--- Widgets del PDF
+import 'package:printing/printing.dart'; // <--- Plugin Printing
+import 'package:share_plus/share_plus.dart'; // <--- Plugin Share Plus
 
 class DetalleLiquidacionView extends StatefulWidget {
   const DetalleLiquidacionView({super.key});
@@ -177,7 +182,63 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
     );
   }
 
-  // Lógica funcional de Facturación restaurada[cite: 12]
+  // --- INICIO INTEGRACIÓN PDF ---
+  Future<Uint8List> _generarPdfFactura() async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('JOBHUB - RECIBO DE LIQUIDACION', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange800)),
+                    pw.Text('Folio #20033'),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text('Fecha de emision: 12 May 2026'),
+              pw.Text('Colaborador: Eduardo (Demo)'),
+              pw.SizedBox(height: 30),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                data: const <List<String>>[
+                  ['Concepto', 'Monto'],
+                  ['Ingreso Bruto por Servicio', '\$1250.00'],
+                  ['Comision App (5%)', '-\$62.50'],
+                  ['Costo Fijo Transaccion', '-\$7.50'],
+                  ['Retencion Impuestos', '\$0.00'],
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('GANANCIA NETA:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('\$800.00 MXN', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
+                ],
+              ),
+              pw.SizedBox(height: 50),
+              pw.Center(child: pw.Text('Documento generado automaticamente por JobHub App.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey))),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save(); // Retorna el archivo en formato de bytes
+  }
+  // --- FIN INTEGRACIÓN PDF ---
+
+  // Lógica funcional de Facturación actualizada con Plugins
   void _mostrarAccionFactura(BuildContext context, String accion) {
     showModalBottomSheet(
       context: context,
@@ -201,11 +262,36 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE26112), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(accion == 'compartir' ? 'Abriendo opciones de compartir...' : 'Descarga iniciada...'), backgroundColor: const Color(0xFF2E7D32)));
+                  
+                  // ---> INICIO INTEGRACIÓN SHARE_PLUS Y PRINTING <---
+                  onPressed: () async {
+                    Navigator.pop(context); // Cierra el modal de inmediato
+                    
+                    // Mostramos indicador de carga nativo
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generando documento PDF...')));
+                    
+                    try {
+                      // 1. Generamos el PDF en memoria usando el plugin 'pdf'
+                      final Uint8List pdfBytes = await _generarPdfFactura();
+                      
+                      if (accion == 'compartir') {
+                        // 2. Usamos share_plus para enviarlo
+                        final xFile = XFile.fromData(pdfBytes, name: 'JobHub_Recibo_20033.pdf', mimeType: 'application/pdf');
+                        await Share.shareXFiles([xFile], text: 'Aquí tienes el recibo de liquidación de mi servicio en JobHub.');
+                      } else {
+                        // 3. Usamos printing para mostrar la vista previa y guardar
+                        await Printing.layoutPdf(
+                          onLayout: (PdfPageFormat format) async => pdfBytes,
+                          name: 'JobHub_Factura_20033',
+                        );
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                    }
                   },
-                  child: Text(accion == 'compartir' ? 'Compartir ahora' : 'Guardar PDF', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  // ---> FIN INTEGRACIÓN <---
+                  
+                  child: Text(accion == 'compartir' ? 'Compartir ahora' : 'Guardar / Imprimir PDF', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

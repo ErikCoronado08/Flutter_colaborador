@@ -3,14 +3,12 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-<<<<<<< Updated upstream
   desktop_drop
   file_selector_windows
   permission_handler_windows
-=======
-  file_selector_windows
+  printing
+  share_plus
   url_launcher_windows
->>>>>>> Stashed changes
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
