@@ -1,4 +1,6 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import '../operaciones/conversation_screen.dart';
 
 class MessagesScreen extends StatelessWidget {
@@ -101,15 +103,33 @@ class MessagesScreen extends StatelessWidget {
             // Avatar con indicador
             Stack(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: unread ? const Color(0xFFE26112).withOpacity(0.1) : Colors.grey.shade100,
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      color: unread ? const Color(0xFFE26112) : Colors.grey.shade600,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: CachedNetworkImage(
+                    imageUrl: 'https://picsum.photos/seed/${initials.toLowerCase()}/100',
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Shimmer.fromColors(
+                      baseColor: Colors.grey.shade300,
+                      highlightColor: Colors.grey.shade100,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        color: Colors.grey.shade300,
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => CircleAvatar(
+                      radius: 24,
+                      backgroundColor: unread ? const Color(0xFFE26112).withOpacity(0.1) : Colors.grey.shade100,
+                      child: Text(
+                        initials,
+                        style: TextStyle(
+                          color: unread ? const Color(0xFFE26112) : Colors.grey.shade600,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
                   ),
                 ),

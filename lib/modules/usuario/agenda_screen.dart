@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
 import '../operaciones/service_detail_screen.dart';
 
 class AgendaScreen extends StatefulWidget {
@@ -12,6 +14,7 @@ class AgendaScreen extends StatefulWidget {
 
 class _AgendaScreenState extends State<AgendaScreen> {
   DateTime selectedDate = DateTime(2026, 5, 19);
+  DateTime focusedDay = DateTime(2026, 5, 19);
 
   final List<Map<String, String>> appointments = [
     {
@@ -110,21 +113,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 
   Widget _buildCalendarCard() {
-    final DateTime monthDate = DateTime(selectedDate.year, selectedDate.month);
-    final int daysInMonth = DateTime(monthDate.year, monthDate.month + 1, 0).day;
-    final int firstWeekday = DateTime(monthDate.year, monthDate.month, 1).weekday;
-    final List<Widget> dayWidgets = [];
-
-    for (int i = 1; i < firstWeekday; i++) {
-      dayWidgets.add(const SizedBox());
-    }
-
-    for (int day = 1; day <= daysInMonth; day++) {
-      final DateTime date = DateTime(monthDate.year, monthDate.month, day);
-      final bool isSelected = selectedDate.day == day;
-      dayWidgets.add(_buildDayTile(day, isSelected, date));
-    }
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -133,90 +121,57 @@ class _AgendaScreenState extends State<AgendaScreen> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 5), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _calendarNavButton(Icons.arrow_back_ios_new, () {
-                setState(() {
-                  selectedDate = _moveMonth(-1);
-                });
-              }),
-              Text(
-                _formatMonthYear(monthDate),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
-              ),
-              _calendarNavButton(Icons.arrow_forward_ios, () {
-                setState(() {
-                  selectedDate = _moveMonth(1);
-                });
-              }),
-            ],
+          TableCalendar(
+            firstDay: DateTime.utc(2024, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: focusedDay,
+            selectedDayPredicate: (day) => isSameDay(selectedDate, day),
+            calendarFormat: CalendarFormat.month,
+            onDaySelected: (selectedDay, focusedDayValue) {
+              setState(() {
+                selectedDate = selectedDay;
+                focusedDay = focusedDayValue;
+              });
+            },
+            onPageChanged: (focusedDayValue) {
+              setState(() {
+                focusedDay = focusedDayValue;
+              });
+            },
+            headerStyle: const HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
+            ),
+            calendarStyle: CalendarStyle(
+              todayDecoration: BoxDecoration(color: const Color(0xFFE26112).withValues(alpha: 51), shape: BoxShape.circle),
+              selectedDecoration: const BoxDecoration(color: Color(0xFFE26112), shape: BoxShape.circle),
+              selectedTextStyle: const TextStyle(color: Colors.white),
+              todayTextStyle: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+              outsideDaysVisible: false,
+            ),
+            daysOfWeekHeight: 32,
           ),
           const SizedBox(height: 20),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: const [
-              Text('Lun', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Mar', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Mié', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Jue', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Vie', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Sáb', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Dom', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                DateFormat('EEEE, d MMMM', 'es_MX').format(selectedDate),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87),
+              ),
+              Text(
+                '${appointments.length} servicios',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 7,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: dayWidgets,
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _calendarNavButton(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: Colors.black87, size: 16),
-      ),
-    );
-  }
-
-  Widget _buildDayTile(int day, bool selected, DateTime date) {
-    return GestureDetector(
-      onTap: () => setState(() {
-        selectedDate = date;
-      }),
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE26112) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          '$day',
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.black87,
-            fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-            fontSize: 15,
-          ),
-        ),
       ),
     );
   }
@@ -268,7 +223,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(color: Colors.black.withValues(alpha: 5), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
         child: Column(
@@ -297,7 +252,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 26),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -370,7 +325,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 TextField(controller: locationController, decoration: const InputDecoration(labelText: 'Ubicación (Colonia)')),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: status,
+                  initialValue: status,
                   decoration: InputDecoration(
                     labelText: 'Estado',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -425,20 +380,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
         );
       },
     );
-  }
-
-  String _formatMonthYear(DateTime date) {
-    return '${_monthName(date.month)} ${date.year}';
-  }
-
-  DateTime _moveMonth(int delta) {
-    final int newMonth = selectedDate.month + delta;
-    final int yearAdjustment = (newMonth <= 0 ? -1 : (newMonth > 12 ? 1 : 0));
-    final int normalizedMonth = ((newMonth - 1) % 12 + 12) % 12 + 1;
-    final int newYear = selectedDate.year + yearAdjustment;
-    final int lastDayOfMonth = DateTime(newYear, normalizedMonth + 1, 0).day;
-    final int newDay = selectedDate.day.clamp(1, lastDayOfMonth);
-    return DateTime(newYear, normalizedMonth, newDay);
   }
 
   String _monthName(int month) {

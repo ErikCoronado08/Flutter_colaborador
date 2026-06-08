@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_colors.dart'; // IMPORTANTE: Ajustar para salir de 'usuario' e ir a 'theme'
 
 class ProfileScreen extends StatefulWidget {
@@ -11,12 +15,35 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final ImagePicker _picker = ImagePicker();
+  File? _profileImage;
+
   final List<String> _specialties = [
     'Plomería',
     'Electricidad',
     'Carpintería',
     'Pintura',
   ];
+
+  Future<void> _pickProfileImage() async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _profileImage = File(pickedFile.path);
+      });
+    }
+  }
+
+  Future<void> _launchSupport() async {
+    final Uri url = Uri(scheme: 'mailto', path: 'soporte@jobhub.com', query: 'subject=Soporte JobHub');
+    if (!await launchUrl(url)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo abrir el correo de soporte.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +89,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildListTile(Icons.article_outlined, 'Documentos de identidad', 'Verificado', trailingColor: AppColors.success, trailingIcon: Icons.check_circle, onTap: () => _showDetailModal(context, 'Identidad', 'Verificado')),
             _buildDivider(),
             _buildListTile(Icons.receipt_long, 'Información fiscal', 'RFC: RAME****123', onTap: () => _showDetailModal(context, 'Fiscal', 'RFC: RAME****123')),
+            _buildDivider(),
+            _buildListTile(Icons.support_agent, 'Soporte', 'Enviar correo', trailingIcon: Icons.arrow_forward_ios, onTap: _launchSupport),
           ]),
           const SizedBox(height: 24),
 
@@ -121,10 +150,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Stack(
             alignment: Alignment.bottomRight,
             children: [
-              CircleAvatar(
-                radius: 46,
-                backgroundColor: AppColors.primary.withOpacity(0.1),
-                child: const Icon(Icons.person, size: 48, color: AppColors.primary),
+              GestureDetector(
+                onTap: _pickProfileImage,
+                child: CircleAvatar(
+                  radius: 46,
+                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                  child: _profileImage == null
+                      ? const Icon(Icons.person, size: 48, color: AppColors.primary)
+                      : null,
+                ),
               ),
               Container(
                 padding: const EdgeInsets.all(4),

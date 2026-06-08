@@ -13,6 +13,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Habilita desugaring para permitir APIs de JDK más modernas en dispositivos antiguos
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -41,4 +43,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// Dependencias adicionales del módulo de aplicación
+dependencies {
+    // Librería traductora para desugaring de APIs de JDK modernas
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

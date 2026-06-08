@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
+<<<<<<< Updated upstream
 // Importaciones de módulos
 import 'modules/main_screen.dart'; 
 import 'modules/finanzas/billetera_view.dart';
+=======
+// Importaciones exactas basadas en tu estructura actual
+import 'modules/main_screen.dart';
+>>>>>>> Stashed changes
 import 'modules/finanzas/detalle_liquidacion_view.dart';
 import 'modules/finanzas/historial_transito_view.dart';
 import 'modules/finanzas/historial_servicios_view.dart';
