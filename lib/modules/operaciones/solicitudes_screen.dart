@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'mapa_servicio_screen.dart'; 
 
 class SolicitudesScreen extends StatefulWidget {
@@ -9,11 +12,14 @@ class SolicitudesScreen extends StatefulWidget {
 }
 
 class _SolicitudesScreenState extends State<SolicitudesScreen> {
-  final double miRating = 4.8;
-  final int misResenas = 24;
+  final double miRating = 5.0; 
+  final int misResenas = 100;
 
   DateTime? horaNotificacionEntrante; 
+  late IO.Socket socket;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
+  // Lista de solicitudes oficiales
   List<Map<String, dynamic>> solicitudes = [
     {
       'id': 'SRV-2026-001234',
@@ -21,12 +27,12 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
       'tiempo': 'Hace 5 min',
       'categoria': 'Plomería',
       'color': Colors.blue,
-      'descripcion': 'Reparación de fuga en tubería de cocina. Urgente.',
+      'descripcion': 'Reparación de fuga en tubería de cocina. Acceso Directo.',
       'direccion': 'Calle Reforma 234, Col. Centro',
       'distancia': '2.3 km',
       'estimado': '1-2 horas',
       'precio': '\$450 MXN',
-      'detalles_cliente': 'Cliente Premium • 12 servicios solicitados',
+      'detalles_cliente': 'Cliente Premium • Orden Verificada',
     },
     {
       'id': 'SRV-2026-001235',
@@ -34,15 +40,72 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
       'tiempo': 'Hace 12 min',
       'categoria': 'Jardinería',
       'color': Colors.green,
-      'descripcion': 'Mantenimiento de jardín y poda de árboles de más de 3 metros.',
+      'descripcion': 'Mantenimiento de jardín y poda de árboles. Acceso Directo.',
       'direccion': 'Av. Universidad 890, Col. Del Valle',
       'distancia': '4.1 km',
       'estimado': '3-4 horas',
       'precio': '\$800 MXN',
-      'detalles_cliente': 'Usuario Verificado • 3 servicios solicitados',
+      'detalles_cliente': 'Usuario Verificado • Orden Verificada',
     },
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _initSocket();
+  }
+
+  @override
+  void dispose() {
+    socket.disconnect(); 
+    socket.dispose();
+    _audioPlayer.dispose(); 
+    super.dispose();
+  }
+
+  // CONEXIÓN CON SOCKET.IO
+  void _initSocket() {
+    socket = IO.io('http://tu-servidor-backend.com', IO.OptionBuilder()
+      .setTransports(['websocket']) 
+      .enableAutoConnect()
+      .build());
+
+    socket.onConnect((_) {
+      debugPrint('Conectado al servidor JobHub');
+    });
+
+    socket.on('nueva_solicitud', (data) {
+      if (!mounted) return;
+      
+      Map<String, dynamic> nuevaOrden = Map<String, dynamic>.from(data);
+      nuevaOrden['color'] = _obtenerColorCategoria(nuevaOrden['categoria']);
+
+      _reproducirSonidoAlerta();
+
+      horaNotificacionEntrante = DateTime.now();
+      _mostrarNotificacionElegante(context, nuevaOrden);
+    });
+  }
+
+  Color _obtenerColorCategoria(String? categoria) {
+    switch (categoria?.toLowerCase()) {
+      case 'plomería': return Colors.blue;
+      case 'jardinería': return Colors.green;
+      case 'electricidad': return Colors.amber.shade700;
+      default: return Colors.purple;
+    }
+  }
+
+  // REPRODUCCIÓN DE AUDIO
+  Future<void> _reproducirSonidoAlerta() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/ping.mp3'));
+    } catch (e) {
+      debugPrint('Error audio: $e');
+    }
+  }
+
+  // SIMULADOR LOCAL 
   void _simularNuevaSolicitud() {
     Map<String, dynamic> servicioEntrante = {
       'id': 'SRV-2026-001299',
@@ -50,14 +113,15 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
       'tiempo': 'Ahora mismo',
       'categoria': 'Electricidad',
       'color': Colors.amber.shade700,
-      'descripcion': 'Cortocircuito en el panel principal. No hay luz.',
+      'descripcion': 'Cortocircuito en el panel principal. Orden Inmediata.',
       'direccion': 'Av. Benito Juárez #405, Col. Industrial',
       'distancia': '1.5 km',
       'estimado': '45 min',
       'precio': '\$650 MXN',
-      'detalles_cliente': 'Solicitud de Emergencia • Alta Prioridad',
+      'detalles_cliente': 'Solicitud Asignada • Alta Prioridad',
     };
 
+    _reproducirSonidoAlerta();
     horaNotificacionEntrante = DateTime.now();
     _mostrarNotificacionElegante(context, servicioEntrante);
   }
@@ -93,11 +157,11 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
-                            child: Row(
+                            child: const Row(
                               children: [
-                                Icon(Icons.stars, color: Colors.green.shade700, size: 14),
-                                const SizedBox(width: 6),
-                                Text('Prioridad por Calificación: $miRating ★', style: TextStyle(color: Colors.green.shade800, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Icon(Icons.check_circle, color: Colors.green, size: 14),
+                                SizedBox(width: 6),
+                                Text('Orden Disponible para Ti', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
@@ -114,7 +178,7 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(color: trabajo['color'].withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-                            child: Icon(Icons.flash_on, color: trabajo['color'], size: 24),
+                            child: Icon(Icons.bolt, color: trabajo['color'], size: 24),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -162,7 +226,7 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
                                 Navigator.pop(dialogContext); 
                                 _procesarAceptacionDirecta(context, trabajo, desdeDetalles: false);
                               },
-                              child: const Text('ACEPTAR E IR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              child: const Text('ACEPTAR AHORA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                             ),
                           ),
                         ],
@@ -179,85 +243,54 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
   }
 
   void _procesarAceptacionDirecta(BuildContext context, Map<String, dynamic> trabajo, {required bool desdeDetalles}) {
-    int segundosTranscurridos = 0;
-    if (horaNotificacionEntrante != null) {
-      segundosTranscurridos = DateTime.now().difference(horaNotificacionEntrante!).inSeconds;
-    }
-
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Padding(
+          content: const Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 40, height: 40,
                   child: CircularProgressIndicator(color: Color(0xFFE26112), strokeWidth: 3),
                 ),
-                const SizedBox(height: 24),
-                const Text('Validando Algoritmo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 8),
-                Text('Verificando disponibilidad en tiempo real...', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                SizedBox(height: 24),
+                Text('Asignando Orden', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                SizedBox(height: 8),
+                Text('Conectando de forma inmediata...', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13)),
               ],
             ),
           ),
         );
       },
     ).then((_) {
+      if (!mounted) return;
       if (desdeDetalles) Navigator.pop(context); 
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 1), () {
       if (!mounted) return;
       Navigator.pop(context); 
 
-      if (!desdeDetalles && segundosTranscurridos > 5) {
-        _mostrarErrorDeAsignacion(context, 'Lo sentimos, este servicio ya fue tomado por otro colaborador con prioridad geográfica activa.');
-      } else if (miRating >= 4.5 && misResenas >= 15) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AceptadoScreen(trabajo: trabajo, miRating: miRating),
-          ),
-        ).then((_) {
+      socket.emit('aceptar_servicio', {'id': trabajo['id']});
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AceptadoScreen(trabajo: trabajo, miRating: miRating),
+        ),
+      ).then((_) {
+        if (mounted) {
           setState(() {
             solicitudes.removeWhere((item) => item['id'] == trabajo['id']);
           });
-        });
-      } else {
-        _mostrarErrorDeAsignacion(context, 'Tu nivel de prioridad actual no fue suficiente para competir por esta orden de emergencia.');
-      }
+        }
+      });
     });
-  }
-
-  void _mostrarErrorDeAsignacion(BuildContext context, String mensaje) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.redAccent),
-              SizedBox(width: 10),
-              Text('No Disponible', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            ],
-          ),
-          content: Text(mensaje, style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('ENTENDIDO', style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold)),
-            )
-          ],
-        );
-      },
-    );
   }
 
   @override
@@ -268,168 +301,237 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: const Text('JobHub', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+        title: const Text('JobHub', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)), // Quitada la palabra Free
         actions: [
           IconButton(
-            icon: const Icon(Icons.notification_add_outlined, color: Color(0xFFE26112)),
-            tooltip: 'Simular Alerta de Trabajo',
+            icon: const Icon(Icons.add_alert_outlined, color: Color(0xFFE26112)),
+            tooltip: 'Simular Orden',
             onPressed: _simularNuevaSolicitud,
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Nuevas Solicitudes', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.verified, size: 16, color: Colors.green.shade700),
-                  const SizedBox(width: 8),
-                  Text('Calificación: $miRating ★ (Prioridad Activa)', style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            if (solicitudes.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 60.0),
-                  child: Column(
-                    children: [
-                      Icon(Icons.business_center_outlined, size: 64, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
-                      Text('Buscando oportunidades...', style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
-                    ],
-                  ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            setState(() {
+              if (solicitudes.isEmpty) {
+                solicitudes = [
+                  {
+                    'id': 'SRV-2026-001234',
+                    'nombre': 'María González',
+                    'tiempo': 'Hace 5 min',
+                    'categoria': 'Plomería',
+                    'color': Colors.blue,
+                    'descripcion': 'Reparación de fuga en tubería de cocina. Acceso Directo.',
+                    'direccion': 'Calle Reforma 234, Col. Centro',
+                    'distancia': '2.3 km',
+                    'estimado': '1-2 horas',
+                    'precio': '\$450 MXN',
+                    'detalles_cliente': 'Cliente Premium',
+                  }
+                ];
+              }
+            });
+          },
+          child: solicitudes.isEmpty
+              ? ListView(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 100.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.refresh_rounded, size: 64, color: Colors.grey.shade300),
+                          const SizedBox(height: 16),
+                          Text('Esperando nuevas solicitudes...', style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
+                          const SizedBox(height: 8),
+                          Text('Usa el botón de arriba ↗ para simular una', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                  itemCount: solicitudes.length + 1, 
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Solicitudes de Trabajo', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12)),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.verified_user_outlined, size: 16, color: Color(0xFFE26112)),
+                                SizedBox(width: 8),
+                                Text('Panel de Control Conectado', style: TextStyle(fontSize: 12, color: Color(0xFFE26112), fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      );
+                    }
+                    
+                    final trabajo = solicitudes[index - 1];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: _buildSlidableCard(context, trabajo),
+                    );
+                  },
                 ),
-              ),
-              
-            ...solicitudes.map((trabajo) => _buildSolicitudCard(context, trabajo)),
-          ],
         ),
       ),
     );
   }
 
-  Widget _buildSolicitudCard(BuildContext context, Map<String, dynamic> trabajo) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+  Widget _buildSlidableCard(BuildContext context, Map<String, dynamic> trabajo) {
+    return Slidable(
+      key: ValueKey(trabajo['id']),
+      
+      startActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.3,
+        children: [
+          SlidableAction(
+            onPressed: (context) => _procesarAceptacionDirecta(context, trabajo, desdeDetalles: false),
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white, 
+            icon: Icons.check,
+            label: 'Aceptar', // Retornado a tu original
+          ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.3,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: trabajo['color'].withOpacity(0.1), 
-                child: Icon(Icons.person, color: trabajo['color'], size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          SlidableAction(
+            onPressed: (context) {
+              setState(() {
+                solicitudes.removeWhere((item) => item['id'] == trabajo['id']);
+              });
+            },
+            backgroundColor: Colors.redAccent,
+            foregroundColor: Colors.white, 
+            icon: Icons.delete_outline,
+            label: 'Ignorar', // Retornado a tu original
+          ),
+        ],
+      ),
+      
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: trabajo['color'].withOpacity(0.1), 
+                  child: Icon(Icons.person, color: trabajo['color'], size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(trabajo['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 2),
+                      Text(trabajo['tiempo'], style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: trabajo['color'].withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                  child: Text(trabajo['categoria'], style: TextStyle(color: trabajo['color'], fontSize: 11, fontWeight: FontWeight.bold)),
+                )
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(trabajo['descripcion'], style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4)),
+            const SizedBox(height: 16),
+            
+            Row(
+              children: [
+                _buildInfoChip(Icons.location_on_outlined, trabajo['distancia']),
+                const SizedBox(width: 12),
+                _buildInfoChip(Icons.schedule, trabajo['estimado']),
+              ],
+            ),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Divider(height: 1, color: Colors.grey.shade100),
+            ),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(trabajo['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 2),
-                    Text(trabajo['tiempo'], style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    const Text('Ganancia Directa', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(trabajo['precio'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
                   ],
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: trabajo['color'].withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                child: Text(trabajo['categoria'], style: TextStyle(color: trabajo['color'], fontSize: 11, fontWeight: FontWeight.bold)),
-              )
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(trabajo['descripcion'], style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4)),
-          const SizedBox(height: 16),
-          
-          // Fila de información resumida (Chips)
-          Row(
-            children: [
-              _buildInfoChip(Icons.location_on_outlined, trabajo['distancia']),
-              const SizedBox(width: 12),
-              _buildInfoChip(Icons.schedule, trabajo['estimado']),
-            ],
-          ),
-          
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, color: Colors.grey.shade100),
-          ),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Ganancia', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  Text(trabajo['precio'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
-                ],
-              ),
-              Row(
-                children: [
-                  OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => DetalleTrabajoScreen(
-                            trabajo: trabajo,
-                            ratingProveedor: miRating,
-                            resenasProveedor: misResenas,
-                            onAceptar: () {
-                              _procesarAceptacionDirecta(context, trabajo, desdeDetalles: true);
-                            },
+                Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DetalleTrabajoScreen(
+                              trabajo: trabajo,
+                              onAceptar: () {
+                                _procesarAceptacionDirecta(context, trabajo, desdeDetalles: true);
+                              },
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Detalles', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
                     ),
-                    child: const Text('Ver más', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () => _procesarAceptacionDirecta(context, trabajo, desdeDetalles: false),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE26112),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => _procesarAceptacionDirecta(context, trabajo, desdeDetalles: false),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE26112),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Aceptar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
-                    child: const Text('Aceptar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              )
-            ],
-          )
-        ],
+                  ],
+                )
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
@@ -437,10 +539,7 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
   Widget _buildInfoChip(IconData icon, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
           Icon(icon, size: 14, color: Colors.grey.shade600),
@@ -452,20 +551,14 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
   }
 }
 
-// ====================================================================
-// PANTALLA: DETALLES DEL TRABAJO (Diseño con Botón Fijo Inferior)
-// ====================================================================
+// PANTALLA DETALLES
 class DetalleTrabajoScreen extends StatelessWidget {
   final Map<String, dynamic> trabajo;
-  final double ratingProveedor;
-  final int resenasProveedor;
   final VoidCallback onAceptar;
 
   const DetalleTrabajoScreen({
     super.key,
     required this.trabajo,
-    required this.ratingProveedor,
-    required this.resenasProveedor,
     required this.onAceptar,
   });
 
@@ -477,13 +570,12 @@ class DetalleTrabajoScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
-        title: Text('Folio: ${trabajo['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+        title: Text('Orden: ${trabajo['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
       ),
-      // Uso de un Stack para fijar la botonera en la parte inferior
       body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.only(left: 16, right: 16, top: 20, bottom: 100), // Espacio extra abajo
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 20, bottom: 100), 
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -496,38 +588,7 @@ class DetalleTrabajoScreen extends StatelessWidget {
                 Text(trabajo['descripcion'], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, height: 1.3)),
                 const SizedBox(height: 24),
                 
-                // Panel de Ventaja Competitiva
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.stars, color: Colors.green.shade700, size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Ventaja por tu Reputación', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade900, fontSize: 15)),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Tu excelente puntaje de $ratingProveedor ★ con $resenasProveedor opiniones te da asignación inmediata en este servicio.',
-                              style: TextStyle(color: Colors.green.shade800, fontSize: 13, height: 1.4),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
-                // Detalles del servicio
-                const Text('Detalles del Servicio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Detalles Generales', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 
                 _buildDetailRow(Icons.location_on_outlined, 'Ubicación', trabajo['direccion']),
@@ -536,12 +597,8 @@ class DetalleTrabajoScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 _buildDetailRow(Icons.route_outlined, 'Distancia', trabajo['distancia']),
                 
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Divider(color: Colors.black12),
-                ),
+                const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Divider(color: Colors.black12)),
                 
-                // Perfil del Cliente
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -570,17 +627,11 @@ class DetalleTrabajoScreen extends StatelessWidget {
             ),
           ),
           
-          // Botonera Fija Inferior
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))
-                ],
-              ),
+              decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
               child: SafeArea(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -589,19 +640,18 @@ class DetalleTrabajoScreen extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Ganancia neta', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                        const Text('Pago Estimado', style: TextStyle(fontSize: 13, color: Colors.grey)),
                         Text(trabajo['precio'], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
                       ],
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE26112),
-                        elevation: 0,
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: onAceptar,
-                      child: const Text('POSTULARME AHORA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      child: const Text('ACEPTAR ORDEN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -634,9 +684,7 @@ class DetalleTrabajoScreen extends StatelessWidget {
   }
 }
 
-// ====================================================================
-// PANTALLA: ¡CONTRATADO / ASIGNADO!
-// ====================================================================
+// PANTALLA ASIGNADO
 class AceptadoScreen extends StatelessWidget {
   final Map<String, dynamic> trabajo;
   final double miRating;
@@ -661,61 +709,40 @@ class AceptadoScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(color: Colors.green.shade50, shape: BoxShape.circle),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.green.shade100, shape: BoxShape.circle),
-                  child: Icon(Icons.check, color: Colors.green.shade600, size: 60),
-                ),
+                child: Icon(Icons.check_circle_rounded, color: Colors.green.shade600, size: 80),
               ),
               const SizedBox(height: 32),
-              const Text('¡TRABAJO ASIGNADO!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              const Text('¡SOLICITUD ADQUIRIDA!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              Text(
-                'Tu alta calificación de $miRating ★ te otorgó prioridad absoluta sobre la orden de ${trabajo['nombre']}.',
+              const Text(
+                'Has tomado esta orden exitosamente. Ya puedes dirigirte al destino asignado.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: Colors.grey.shade600, height: 1.5),
+                style: TextStyle(fontSize: 15, color: Colors.grey, height: 1.5),
               ),
               const SizedBox(height: 40),
               
-              // Tarjeta Resumen
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 5))],
                 ),
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Icon(Icons.work_outline, color: trabajo['color'], size: 20),
-                            const SizedBox(width: 8),
-                            Text(trabajo['categoria'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          ],
-                        ),
+                        Text(trabajo['categoria'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         Text(trabajo['precio'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
                       ],
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Divider(height: 1),
-                    ),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(height: 1)),
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Icon(Icons.location_on_outlined, size: 18, color: Colors.grey),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            trabajo['direccion'],
-                            style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
-                          ),
-                        ),
+                        Expanded(child: Text(trabajo['direccion'], style: const TextStyle(fontSize: 14))),
                       ],
                     )
                   ],
@@ -727,20 +754,17 @@ class AceptadoScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE26112),
-                    elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => MapaServicioScreen(trabajo: trabajo),
-                      ),
+                      MaterialPageRoute(builder: (context) => MapaServicioScreen(trabajo: trabajo)),
                     );
                   },
-                  icon: const Icon(Icons.directions_car, color: Colors.white, size: 20),
-                  label: const Text('INICIAR RUTA AL EMPLEO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  icon: const Icon(Icons.directions_car, color: Colors.white),
+                  label: const Text('VER RUTA EN MAPA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

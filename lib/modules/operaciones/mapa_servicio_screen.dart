@@ -1,4 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+
+// Clase personalizada para almacenar coordenadas de forma segura
+class PosicionGeografica {
+  final double latitude;
+  final double longitude;
+  const PosicionGeografica(this.latitude, this.longitude);
+}
 
 class MapaServicioScreen extends StatefulWidget {
   final Map<String, dynamic> trabajo;
@@ -9,8 +19,14 @@ class MapaServicioScreen extends StatefulWidget {
 }
 
 class _MapaServicioScreenState extends State<MapaServicioScreen> {
-  // Estados del flujo estilo Uber: 
-  // 0 = En camino a la casa | 1 = Llegué/Trabajando | 2 = Terminado
+  final MapController _mapController = MapController();
+  
+  // Coordenadas iniciales por defecto (Centro de Lima)
+  PosicionGeografica _posicionActual = const PosicionGeografica(-12.046374, -77.042793);
+  bool _cargandoPosicion = true;
+
+  StreamSubscription<Position>? _positionStreamSubscription;
+  late PosicionGeografica _coordenadasDestino;
   int pasoServicio = 0; 
 
   String get botonTexto {
@@ -26,51 +42,94 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    
+    _coordenadasDestino = PosicionGeografica(
+      widget.trabajo['lat'] ?? -12.046374, 
+      widget.trabajo['lng'] ?? -77.042793
+    );
+
+    _configurarGPSYSeguimiento();
+  }
+
+  @override
+  void dispose() {
+    _positionStreamSubscription?.cancel();
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _configurarGPSYSeguimiento() async {
+    bool servicioHabilitado;
+    LocationPermission permiso;
+
+    servicioHabilitado = await Geolocator.isLocationServiceEnabled();
+    if (!servicioHabilitado) {
+      if (mounted) setState(() => _cargandoPosicion = false);
+      return;
+    }
+
+    permiso = await Geolocator.checkPermission();
+    if (permiso == LocationPermission.denied) {
+      permiso = await Geolocator.requestPermission();
+      if (permiso == LocationPermission.denied) {
+        if (mounted) setState(() => _cargandoPosicion = false);
+        return;
+      }
+    }
+
+    try {
+      Position position = await Geolocator.getCurrentPosition();
+      if (mounted) {
+        setState(() {
+          _posicionActual = PosicionGeografica(position.latitude, position.longitude);
+          _cargandoPosicion = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargandoPosicion = false);
+    }
+
+    _positionStreamSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10)
+    ).listen((Position pos) {
+      if (mounted) {
+        setState(() {
+          _posicionActual = PosicionGeografica(pos.latitude, pos.longitude);
+        });
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. SIMULACIÓN DEL MAPA EN VIVO (Fondo estilo GPS)
-          Container(
-            color: Colors.grey.shade100,
-            width: double.infinity,
-            height: double.infinity,
-            child: GridPaper(
-              color: Colors.blue.withOpacity(0.05),
-              divisions: 2,
-              subdivisions: 4,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Ruta trazada simulada
-                  Positioned(
-                    top: 220,
-                    child: Icon(Icons.navigation, size: 48, color: Colors.blue.shade700),
+          _cargandoPosicion
+              ? const Center(child: CircularProgressIndicator())
+              : FlutterMap(
+                  mapController: _mapController,
+                  options: const MapOptions(
+                    // Inicializamos el mapa en el centro por defecto de la cámara
+                    initialZoom: 15.5,
                   ),
-                  Positioned(
-                    top: 150, left: 140,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                      child: const Text('Ruta óptima: 8 min', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.jobhub.colaborador',
                     ),
-                  ),
-                  const Positioned(
-                    top: 100,
-                    child: Icon(Icons.location_on, size: 50, color: Colors.red),
-                  )
-                ],
-              ),
-            ),
-          ),
+                  ],
+                ),
 
-          // 2. BARRA DE INDICACIONES FLOTANTE (ESTILO UBER)
+          // BARRA DE INDICACIONES FLOTANTE
           Positioned(
             top: 45, left: 16, right: 16,
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A), // Corrección del color de fondo oscuro limpia
+                color: const Color(0xFF1A1A1A), 
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
               ),
@@ -82,18 +141,18 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('A 400 metros de la orden', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(widget.trabajo['direccion'], style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis),
+                        const Text('En ruta hacia la orden', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(widget.trabajo['direccion'] ?? 'Dirección no disponible', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   ),
-                  Text(widget.trabajo['distancia'], style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                  Text(widget.trabajo['distancia'] ?? '2.3 km', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
           ),
 
-          // 3. HOJA INFERIOR DESLIZABLE CON LOS DATOS DEL CLIENTE Y ACCIONES
+          // HOJA INFERIOR DEL CLIENTE
           Positioned(
             bottom: 0, left: 0, right: 0,
             child: Container(
@@ -106,15 +165,11 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Indicador de control superior con margen corregido a only(bottom: 12)
                   Container(
-                    width: 40, 
-                    height: 4, 
+                    width: 40, height: 4, 
                     margin: const EdgeInsets.only(bottom: 12), 
                     decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
                   ),
-                  
-                  // Información del usuario a atender
                   Row(
                     children: [
                       CircleAvatar(radius: 24, backgroundColor: Colors.orange.shade100, child: const Icon(Icons.person, color: Color(0xFFFF6F00))),
@@ -123,35 +178,26 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(widget.trabajo['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                            Text('Servicio activo de ${widget.trabajo['categoria']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                            Text(widget.trabajo['nombre'] ?? 'Cliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                            Text('Servicio activo de ${widget.trabajo['categoria'] ?? "General"}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                           ],
                         ),
                       ),
-                      // Botones rápidos estilo Uber de contacto
                       IconButton(
                         icon: const CircleAvatar(backgroundColor: Colors.black12, child: Icon(Icons.chat_bubble_outline, size: 20, color: Colors.black87)),
                         onPressed: () => _mostrarChatSimulado(context),
                       ),
-                      IconButton(
-                        icon: const CircleAvatar(backgroundColor: Colors.black12, child: Icon(Icons.phone, size: 20, color: Colors.black87)),
-                        onPressed: () {},
-                      ),
                     ],
                   ),
                   const Divider(height: 24),
-                  
-                  // Tarifa transparente fijada
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Ganancia estimada al finalizar:', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                      Text(widget.trabajo['precio'], style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+                      const Text('Ganancia estimada:', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      Text(widget.trabajo['precio'] ?? 'S/. 0.00', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // BOTÓN DE ACCIÓN CENTRALIZADO (MANEJA LAS ETAPAS DEL VIAJE)
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -165,7 +211,6 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
                           if (pasoServicio < 2) {
                             pasoServicio++;
                           } else {
-                            // Si ya terminó el flujo, nos salimos de la navegación y regresamos al pool
                             Navigator.pop(context);
                           }
                         });
@@ -182,7 +227,6 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
     );
   }
 
-  // Ventana de Chat Flotante instantánea
   void _mostrarChatSimulado(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -194,20 +238,20 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Chat con ${widget.trabajo['nombre']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Chat con ${widget.trabajo['nombre'] ?? "Cliente"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const Divider(),
             ListTile(
               leading: const CircleAvatar(child: Icon(Icons.person)),
               title: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
-                child: const Text('Hola, ¿ya vienes en camino? El timbre no funciona bien.'),
+                child: const Text('Hola, ¿ya vienes en camino?'),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               decoration: InputDecoration(
-                hintText: 'Escribe un mensaje seguro...',
+                hintText: 'Escribe un mensaje...',
                 suffixIcon: IconButton(icon: const Icon(Icons.send, color: Color(0xFFFF6F00)), onPressed: () => Navigator.pop(context)),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
               ),

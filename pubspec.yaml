@@ -2,7 +2,8 @@ name: jobhub_colaborador
 description: "A new Flutter project."
 publish_to: 'none'
 version: 1.0.0+1
-
+assets:
+    - assets/sounds/
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
@@ -27,8 +28,6 @@ dependencies:
   intl: ^0.18.0
 
   # --- Dependencias de Finanzas (Erick) ---
-  # Nota: Agregué las que faltaban según tu lista de plugins
-  # fl_chart, pdf, printing, share_plus, flutter_svg, http, auto_size_text
   fl_chart: ^0.69.0
   pdf: ^3.11.0
   printing: ^5.13.0
@@ -36,7 +35,21 @@ dependencies:
   flutter_svg: ^2.0.16
   http: ^1.3.0
   auto_size_text: ^3.0.0
-  
+
+  # --- NUEVAS: Dependencias de Operaciones y Chat (Roxana) ---
+ # Pon estas:
+  flutter_map: ^6.1.0                 # El motor de mapas gratuito
+  latlong2: ^0.9.1
+  geolocator: ^11.0.0                 # Conservamos este para tu GPS real                # Ubicación GPS del colaborador
+  flutter_polyline_points: ^2.1.0     # Dibujo de rutas óptimas en mapa
+  socket_io_client: ^3.1.1            # Recepción de solicitudes en tiempo real
+  flutter_chat_ui: ^1.6.11            # Estructura estética y burbujas de chat
+  flutter_chat_types: ^3.6.2          # Tipados necesarios para el chat ui
+  audioplayers: ^6.0.0                # Notificaciones sonoras para nuevos trabajos
+  flutter_slidable: ^3.1.0            # Listas interactivas (deslizar para cancelar)
+  percent_indicator: ^4.2.3 
+            # Progreso visual del servicio activo
+
   # --- Otras dependencias ---
   desktop_drop: ^0.4.0
 
