@@ -1,10 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:desktop_drop/desktop_drop.dart'; // Importación necesaria
+import 'package:desktop_drop/desktop_drop.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_overlay.dart';
+import '../../services/auth_service.dart'; 
 
 class Documents extends StatefulWidget {
   const Documents({super.key});
@@ -15,10 +17,28 @@ class Documents extends StatefulWidget {
 
 class _DocumentsState extends State<Documents> {
   final ImagePicker _picker = ImagePicker();
+  final AuthService _authService = AuthService();
   bool _estaCargando = false;
-  double _progreso = 0.5; // Comienza al 50%
+  final double _progreso = 0.5;
 
-  Future<void> _showUploadOptions(String documentName) async {
+  File? _ineFile, _compFile, _fotoFile, _antFile;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ya no se consulta estatus al servidor al iniciar para evitar errores de autenticación
+  }
+
+  void _guardarArchivo(String key, File file) {
+    setState(() {
+      if (key == 'ine_subido') _ineFile = file;
+      if (key == 'comprobante_subido') _compFile = file;
+      if (key == 'foto_subida') _fotoFile = file;
+      if (key == 'antecedentes_subido') _antFile = file;
+    });
+  }
+
+  Future<void> _showUploadOptions(String documentName, String key) async {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -30,7 +50,7 @@ class _DocumentsState extends State<Documents> {
               title: const Text("Tomar foto"),
               onTap: () {
                 Navigator.pop(context);
-                _handleCameraUpload(documentName);
+                _handleCameraUpload(key);
               },
             ),
             ListTile(
@@ -38,7 +58,7 @@ class _DocumentsState extends State<Documents> {
               title: const Text("Seleccionar PDF o Imagen"),
               onTap: () {
                 Navigator.pop(context);
-                _handleFilePicker(documentName);
+                _handleFilePicker(key);
               },
             ),
           ],
@@ -47,78 +67,107 @@ class _DocumentsState extends State<Documents> {
     );
   }
 
-  Future<void> _handleCameraUpload(String docName) async {
+  Future<void> _handleCameraUpload(String key) async {
     var status = await Permission.camera.request();
     if (status.isGranted) {
       final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
       if (photo != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$docName capturado correctamente')));
+        _guardarArchivo(key, File(photo.path));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto capturada con éxito')));
       }
-    } else if (status.isPermanentlyDenied) {
-      openAppSettings();
     }
   }
 
-  Future<void> _handleFilePicker(String docName) async {
+  Future<void> _handleFilePicker(String key) async {
     try {
       FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['jpg', 'pdf', 'png'],
       );
-      if (result != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$docName seleccionado: ${result.files.single.name}')));
+      if (result != null && result.files.single.path != null && mounted) {
+        _guardarArchivo(key, File(result.files.single.path!));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Archivo seleccionado con éxito')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al seleccionar el archivo')));
+    }
+  }
+
+  Future<void> _submitDocuments() async {
+    if (_ineFile == null || _compFile == null || _fotoFile == null || _antFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Debes seleccionar todos los archivos")));
+      return;
+    }
+
+    setState(() => _estaCargando = true);
+    
+    try {
+      print("Subiendo archivos al servidor..."); 
+      await _authService.subirDocumentos(
+        ine: _ineFile!,
+        comprobante: _compFile!,
+        fotoPerfil: _fotoFile!,
+        antecedentes: _antFile!,
+      );
+
+      if (mounted) {
+        setState(() => _estaCargando = false);
+        print("Envío terminado: Redirigiendo a Login.");
+        // Redirección directa e incondicional a la vista de Login
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al seleccionar el archivo')));
+        setState(() => _estaCargando = false);
+        print("Error en el envío, redirigiendo de igual forma: $e");
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     }
   }
 
-  // Tarjeta de documento con DropTarget integrado
-  Widget documentCard(String title, String subtitle) {
-    return DropTarget(
-      onDragDone: (details) async {
-        for (var file in details.files) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title cargado: ${file.name}')));
-          }
-        }
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFE8E8E8)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.03), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 55, height: 55,
-              decoration: BoxDecoration(color: const Color(0xFFFBECE3), borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.description_outlined, color: Color(0xFFE26112), size: 28),
+  Widget documentCard(String title, String statusKey, String subtitle) {
+    bool isSelected = (statusKey == 'ine_subido' && _ineFile != null) ||
+                      (statusKey == 'comprobante_subido' && _compFile != null) ||
+                      (statusKey == 'foto_subida' && _fotoFile != null) ||
+                      (statusKey == 'antecedentes_subido' && _antFile != null);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: isSelected ? Colors.green : const Color(0xFFE8E8E8)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.03), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 55, height: 55,
+            decoration: BoxDecoration(color: isSelected ? Colors.green.shade50 : const Color(0xFFFBECE3), borderRadius: BorderRadius.circular(14)),
+            child: Icon(
+              isSelected ? Icons.check_circle : Icons.description_outlined, 
+              color: isSelected ? Colors.green : const Color(0xFFE26112), 
+              size: 28
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(color: Color(0xFF222222), fontWeight: FontWeight.w600, fontSize: 15)),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: Color(0xFF777777), fontSize: 12)),
-                ],
-              ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Color(0xFF222222), fontWeight: FontWeight.w600, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text(isSelected ? "Archivo cargado localmente" : subtitle, style: TextStyle(color: isSelected ? Colors.green : const Color(0xFF777777), fontSize: 12)),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () => _showUploadOptions(title),
-              style: ElevatedButton.styleFrom(elevation: 0, backgroundColor: const Color(0xFFE26112), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text("Subir", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
+          ),
+          ElevatedButton(
+            onPressed: () => _showUploadOptions(title, statusKey),
+            style: ElevatedButton.styleFrom(elevation: 0, backgroundColor: const Color(0xFFE26112), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: Text(isSelected ? "Cambiar" : "Subir", style: const TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -142,59 +191,22 @@ class _DocumentsState extends State<Documents> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back, color: Color(0xFFE26112)),
-                          label: const Text("Volver", style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                      Center(
-                        child: Column(
-                          children: [
-                            Image.asset('assets/images/logo.png', width: 90),
-                            const SizedBox(height: 15),
-                            const Text("CONECTANDO OPORTUNIDADES", style: TextStyle(color: Color(0xFFE26112), fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 25),
                       Container(
                         padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: const Color(0xFFE8E8E8)),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(.05), blurRadius: 20, offset: const Offset(0, 8))],
-                        ),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
                         child: Column(
                           children: [
                             const Text("Paso 2 de 2", style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 8),
-                            const Text("Expediente de Seguridad", textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF111111), fontSize: 24, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 20),
-                            documentCard("Identificación Oficial (INE)", "PDF o JPG"),
-                            documentCard("Comprobante de domicilio", "PDF o JPG"),
-                            documentCard("Foto de perfil", "JPG cuadrado"),
-                            documentCard("Antecedentes no penales", "PDF o JPG"),
+                            documentCard("Identificación Oficial (INE)", "ine_subido", "PDF o JPG"),
+                            documentCard("Comprobante de domicilio", "comprobante_subido", "PDF o JPG"),
+                            documentCard("Foto de perfil", "foto_subida", "JPG cuadrado"),
+                            documentCard("Antecedentes no penales", "antecedentes_subido", "PDF o JPG"),
                             const SizedBox(height: 25),
                             CustomButton(
                               text: "ENVIAR EXPEDIENTE",
-                              onTap: () async {
-                                setState(() {
-                                  _estaCargando = true;
-                                  _progreso = 0.75;
-                                });
-                                await Future.delayed(const Duration(seconds: 2));
-                                setState(() => _progreso = 1.0);
-                                await Future.delayed(const Duration(milliseconds: 500));
-                                
-                                if (mounted) {
-                                  setState(() => _estaCargando = false);
-                                  Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-                                }
-                              },
+                              onTap: () => _submitDocuments(), 
                             ),
                           ],
                         ),
