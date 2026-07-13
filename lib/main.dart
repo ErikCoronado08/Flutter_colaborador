@@ -12,7 +12,7 @@ import 'modules/auth/register.dart';
 import 'modules/auth/documents.dart';
 import 'modules/usuario/agenda_screen.dart';
 import 'modules/usuario/messages_screen.dart';
-import 'modules/operaciones/chat_screen.dart';
+
 import 'modules/operaciones/service_detail_screen.dart';
 
 void main() async { // <--- CAMBIADO A ASYNC
@@ -57,7 +57,7 @@ class JobHubApp extends StatelessWidget {
         '/historial_transito': (context) => const HistorialTransitoView(),
         '/historial': (context) => const HistorialServiciosView(),
         '/mensajes': (context) => const MessagesScreen(),
-        '/chat': (context) => const ChatScreen(),
+        
         '/agenda': (context) => const AgendaScreen(standalone: true),
         '/detalle_servicio': (context) => const ServiceDetailScreen(
               clientName: 'N/A', 

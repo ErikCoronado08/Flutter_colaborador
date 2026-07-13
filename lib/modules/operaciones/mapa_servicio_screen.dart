@@ -1,14 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-
-// Clase personalizada para almacenar coordenadas de forma segura
-class PosicionGeografica {
-  final double latitude;
-  final double longitude;
-  const PosicionGeografica(this.latitude, this.longitude);
-}
+import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart';
+import '../../../services/api_service.dart'; // Ajusta la ruta a tu api_service.dart
 
 class MapaServicioScreen extends StatefulWidget {
   final Map<String, dynamic> trabajo;
@@ -21,245 +18,210 @@ class MapaServicioScreen extends StatefulWidget {
 class _MapaServicioScreenState extends State<MapaServicioScreen> {
   final MapController _mapController = MapController();
   
-  // Coordenadas iniciales por defecto (Centro de Lima)
-  PosicionGeografica _posicionActual = const PosicionGeografica(-12.046374, -77.042793);
-  bool _cargandoPosicion = true;
+  // Coordenadas predeterminadas (Por si el GPS tarda) basadas en tu Mongo local
+  LatLng _posicionActual = LatLng(20.96, -89.61); 
+  late LatLng _coordenadasDestino;
+  
+  bool _cargando = true;
+  List<LatLng> _puntosRuta = [];
+  String _tiempoEstimado = "Calculando...";
 
-  StreamSubscription<Position>? _positionStreamSubscription;
-  late PosicionGeografica _coordenadasDestino;
-  int pasoServicio = 0; 
-
-  String get botonTexto {
-    if (pasoServicio == 0) return 'YA LLEGUÉ A LA UBICACIÓN';
-    if (pasoServicio == 1) return 'FINALIZAR TRABAJO COMPLETO';
-    return 'REGRESAR A SOLICITUDES';
-  }
-
-  Color get botonColor {
-    if (pasoServicio == 0) return Colors.blue.shade800;
-    if (pasoServicio == 1) return Colors.green.shade700;
-    return const Color(0xFFFF6F00);
-  }
+  final String _orsApiKey = "5b3ce3597851110001cf6248c8bfa9df9c7c4e51921f64f33da07d08";
 
   @override
   void initState() {
     super.initState();
     
-    _coordenadasDestino = PosicionGeografica(
-      widget.trabajo['lat'] ?? -12.046374, 
-      widget.trabajo['lng'] ?? -77.042793
-    );
+    // Extraer coordenadas de destino del JSON de MongoDB
+    final ubicacion = widget.trabajo['ubicacion'];
+    double destLat = 20.96;
+    double destLng = -89.61;
 
-    _configurarGPSYSeguimiento();
-  }
-
-  @override
-  void dispose() {
-    _positionStreamSubscription?.cancel();
-    _mapController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _configurarGPSYSeguimiento() async {
-    bool servicioHabilitado;
-    LocationPermission permiso;
-
-    servicioHabilitado = await Geolocator.isLocationServiceEnabled();
-    if (!servicioHabilitado) {
-      if (mounted) setState(() => _cargandoPosicion = false);
-      return;
+    if (ubicacion != null) {
+      destLat = double.tryParse(ubicacion['lat'].toString()) ?? 20.96;
+      destLng = double.tryParse(ubicacion['lng'].toString()) ?? -89.61;
     }
 
-    permiso = await Geolocator.checkPermission();
+    _coordenadasDestino = LatLng(destLat, destLng);
+    _inicializarMapaYGPS();
+  }
+
+  Future<void> _inicializarMapaYGPS() async {
+    setState(() => _cargando = true);
+    
+    LocationPermission permiso = await Geolocator.checkPermission();
     if (permiso == LocationPermission.denied) {
       permiso = await Geolocator.requestPermission();
-      if (permiso == LocationPermission.denied) {
-        if (mounted) setState(() => _cargandoPosicion = false);
-        return;
-      }
     }
 
     try {
-      Position position = await Geolocator.getCurrentPosition();
-      if (mounted) {
-        setState(() {
-          _posicionActual = PosicionGeografica(position.latitude, position.longitude);
-          _cargandoPosicion = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _cargandoPosicion = false);
+      Position position = await Geolocator.getCurrentPosition(
+        timeLimit: const Duration(seconds: 4)
+      );
+      _posicionActual = LatLng(position.latitude, position.longitude);
+    } catch (e) {
+      debugPrint("El GPS tardó, usando ubicación base predeterminada.");
     }
 
-    _positionStreamSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10)
-    ).listen((Position pos) {
-      if (mounted) {
+    await _obtenerRutaDesdeAPI();
+
+    if (mounted) {
+      setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _obtenerRutaDesdeAPI() async {
+    final String url = 
+        'https://api.openrouteservice.org/v2/directions/driving-car'
+        '?api_key=$_orsApiKey'
+        '&start=${_posicionActual.longitude},${_posicionActual.latitude}'
+        '&end=${_coordenadasDestino.longitude},${_coordenadasDestino.latitude}';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> coords = data['features'][0]['geometry']['coordinates'];
+        final double segundos = data['features'][0]['properties']['summary']['duration'];
+
         setState(() {
-          _posicionActual = PosicionGeografica(pos.latitude, pos.longitude);
+          _puntosRuta = coords.map((c) => LatLng(c[1], c[0])).toList();
+          _tiempoEstimado = "${(segundos / 60).round()} min";
         });
+      } else {
+        _generarLineaRectaRespaldo();
       }
+    } catch (e) {
+      _generarLineaRectaRespaldo();
+    }
+  }
+
+  void _generarLineaRectaRespaldo() {
+    setState(() {
+      _puntosRuta = [_posicionActual, _coordenadasDestino];
+      _tiempoEstimado = "12 min (Simulado)";
     });
+  }
+
+  // 🚀 FUNCIÓN ASÍNCRONA PARA FINALIZAR EL TRABAJO
+  void _procesarFinalizacionTrabajo() async {
+    final String idServicio = (widget.trabajo['_id'] ?? widget.trabajo['id'] ?? '').toString();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.green)),
+    );
+
+    bool exito = await ApiService.finalizarServicio(idServicio);
+    Navigator.pop(context); // Quitar círculo de carga
+
+    if (exito) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Servicio finalizado con éxito en MongoDB!'), backgroundColor: Colors.green),
+      );
+      // Regresa al menú principal cerrando la vista del mapa
+      Navigator.pop(context); 
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al comunicar la finalización del servicio'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          _cargandoPosicion
-              ? const Center(child: CircularProgressIndicator())
-              : FlutterMap(
-                  mapController: _mapController,
-                  options: const MapOptions(
-                    // Inicializamos el mapa en el centro por defecto de la cámara
-                    initialZoom: 15.5,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.jobhub.colaborador',
-                    ),
-                  ],
+      body: _cargando 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF6F00)))
+        : Stack(
+            children: [
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  center: _posicionActual,
+                  zoom: 14.0,
                 ),
-
-          // BARRA DE INDICACIONES FLOTANTE
-          Positioned(
-            top: 45, left: 16, right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A), 
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
-              ),
-              child: Row(
                 children: [
-                  const Icon(Icons.turn_right, color: Colors.greenAccent, size: 32),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('En ruta hacia la orden', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(widget.trabajo['direccion'] ?? 'Dirección no disponible', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis),
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.jobhub.colaborador',
+                  ),
+
+                  if (_puntosRuta.isNotEmpty)
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: _puntosRuta,
+                          strokeWidth: 5.5,
+                          color: Colors.blue.shade700,
+                        ),
                       ],
                     ),
+
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _posicionActual,
+                        width: 45,
+                        height: 45,
+                        child: Icon(Icons.navigation, color: Colors.blue.shade800, size: 35),
+                      ),
+                      Marker(
+                        point: _coordenadasDestino,
+                        width: 45,
+                        height: 45,
+                        child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                      ),
+                    ],
                   ),
-                  Text(widget.trabajo['distancia'] ?? '2.3 km', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                 ],
               ),
-            ),
+
+              Positioned(
+                top: 60,
+                left: 20,
+                child: CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.black),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
+
+              Positioned(
+                top: 140,
+                left: MediaQuery.of(context).size.width * 0.25,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  child: Text(
+                    '🚗 Tiempo estimado: $_tiempoEstimado', // Corregido el nombre de la variable
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+
+              // BOTÓN INFERIOR CAMBIADO A ACCIÓN DE FINALIZAR TRABAJO REAL
+              Positioned(
+                bottom: 20, left: 20, right: 20,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _procesarFinalizacionTrabajo,
+                  child: const Text('FINALIZAR TRABAJO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ),
+            ],
           ),
-
-          // HOJA INFERIOR DEL CLIENTE
-          Positioned(
-            bottom: 0, left: 0, right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 15, spreadRadius: 2)],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40, height: 4, 
-                    margin: const EdgeInsets.only(bottom: 12), 
-                    decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-                  ),
-                  Row(
-                    children: [
-                      CircleAvatar(radius: 24, backgroundColor: Colors.orange.shade100, child: const Icon(Icons.person, color: Color(0xFFFF6F00))),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(widget.trabajo['nombre'] ?? 'Cliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                            Text('Servicio activo de ${widget.trabajo['categoria'] ?? "General"}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const CircleAvatar(backgroundColor: Colors.black12, child: Icon(Icons.chat_bubble_outline, size: 20, color: Colors.black87)),
-                        onPressed: () => _mostrarChatSimulado(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Ganancia estimada:', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                      Text(widget.trabajo['precio'] ?? 'S/. 0.00', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: botonColor,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          if (pasoServicio < 2) {
-                            pasoServicio++;
-                          } else {
-                            Navigator.pop(context);
-                          }
-                        });
-                      },
-                      child: Text(botonTexto, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  void _mostrarChatSimulado(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, top: 16, left: 16, right: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Chat con ${widget.trabajo['nombre'] ?? "Cliente"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const Divider(),
-            ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.person)),
-              title: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
-                child: const Text('Hola, ¿ya vienes en camino?'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                hintText: 'Escribe un mensaje...',
-                suffixIcon: IconButton(icon: const Icon(Icons.send, color: Color(0xFFFF6F00)), onPressed: () => Navigator.pop(context)),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
     );
   }
 }
