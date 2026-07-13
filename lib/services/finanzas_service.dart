@@ -2,47 +2,43 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class FinanzasService {
-  // URL local para probar el backend en la red del equipo
-  final String baseUrl = 'http://192.168.0.172:8000/api';
 
-  // ---> INICIO INTEGRACIÓN HTTP <---
-  Future<Map<String, dynamic>> obtenerSaldoUsuario(String userId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/saldo/$userId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer TU_TOKEN_JWT_AQUI',
-        },
-      );
+  final String baseUrl = 'http://192.168.0.130:8000/api/finanzas';
 
-      if (response.statusCode == 200) {
-        // Retorna los datos reales de la base de datos
-        return json.decode(response.body);
-      } else {
-        throw Exception('Error al cargar la información financiera');
-      }
-    } catch (e) {
-      // MOCK DE SEGURIDAD: Mientras construyen el backend, devolvemos 
-      // estos datos estáticos para que tu aplicación no se rompa al probarla.
-      return {
-        'saldoDisponible': 1254890.50,
-        'saldoTransito': 450.00,
-      };
-    }
+  Future<Map<String, dynamic>> obtenerSaldoUsuario() async {
+    final response = await http.get(Uri.parse('$baseUrl/saldo'), headers: {'Accept': 'application/json'});
+    if (response.statusCode == 200) return json.decode(response.body)['data'];
+    throw Exception('Error al cargar saldo');
+  }
+
+  Future<List<dynamic>> obtenerHistorial() async {
+    final response = await http.get(Uri.parse('$baseUrl/historial-servicios'), headers: {'Accept': 'application/json'});
+    if (response.statusCode == 200) return json.decode(response.body)['data'];
+    throw Exception('Error al cargar historial');
+  }
+
+  Future<List<dynamic>> obtenerTransitos() async {
+    final response = await http.get(Uri.parse('$baseUrl/transitos'), headers: {'Accept': 'application/json'});
+    if (response.statusCode == 200) return json.decode(response.body)['data'];
+    throw Exception('Error al cargar tránsitos');
+  }
+
+  Future<Map<String, dynamic>> obtenerDetalle(String folio) async {
+    final response = await http.get(Uri.parse('$baseUrl/detalle/$folio'), headers: {'Accept': 'application/json'});
+    if (response.statusCode == 200) return json.decode(response.body)['data'];
+    throw Exception('Error al cargar detalle');
   }
 
   Future<bool> solicitarRetiro(double monto, String cuentaId) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/retiro'),
+        Uri.parse('$baseUrl/solicitar-retiro'),
         body: json.encode({'monto': monto, 'cuenta_id': cuentaId}),
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
       );
-      return response.statusCode == 200;
+      return response.statusCode == 201;
     } catch (e) {
-      return false; 
+      return false;
     }
   }
-  // ---> FIN INTEGRACIÓN HTTP <---
 }

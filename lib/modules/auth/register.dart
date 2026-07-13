@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../../widgets/custom_textfield.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_overlay.dart';
@@ -14,6 +16,25 @@ class _RegisterState extends State<Register> {
   bool _estaCargando = false;
   String? selectedGender;
   DateTime? _birthDate;
+
+  // Controladores
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController(); // <- Nuevo
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _experienceController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    _experienceController.dispose();
+    super.dispose();
+  }
 
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -41,6 +62,63 @@ class _RegisterState extends State<Register> {
     }
   }
 
+  Future<void> _procesarRegistro() async {
+    final nombre = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    if (nombre.isEmpty || email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nombre, correo y contraseña son obligatorios'), backgroundColor: Colors.red)
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres'), backgroundColor: Colors.red)
+      );
+      return;
+    }
+
+    setState(() => _estaCargando = true);
+
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.0.38:8000/api/register'), 
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: json.encode({
+          'name': nombre,
+          'email': email,
+          'password': password,
+          'gender': selectedGender
+        }),
+      );
+
+      final data = json.decode(response.body);
+      setState(() => _estaCargando = false);
+
+      if (response.statusCode == 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(data['message']), backgroundColor: Colors.green)
+          );
+          Navigator.pushNamed(context, '/documents'); 
+        }
+      } else {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(data['message'] ?? 'Error al registrar'), backgroundColor: Colors.red)
+        );
+      }
+    } catch (e) {
+      setState(() => _estaCargando = false);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error de conexión: $e'), backgroundColor: Colors.red)
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     String dateHint = _birthDate == null
@@ -55,7 +133,7 @@ class _RegisterState extends State<Register> {
           child: Column(
             children: [
               LinearProgressIndicator(
-                value: 0.0, // Barra vacía al iniciar
+                value: 0.0,
                 backgroundColor: Colors.grey.shade200,
                 valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE26112)),
               ),
@@ -98,11 +176,17 @@ class _RegisterState extends State<Register> {
                               child: Text("Paso 1 de 2: Información personal", style: TextStyle(color: Color(0xFF666666), fontSize: 15)),
                             ),
                             const SizedBox(height: 25),
-                            const CustomTextField(hint: "Ingresa tu nombre completo", icon: Icons.person),
+                            
+                            CustomTextField(hint: "Ingresa tu nombre completo", icon: Icons.person, controller: _nameController),
                             const SizedBox(height: 16),
-                            const CustomTextField(hint: "Ingresa tu correo electrónico", icon: Icons.email_outlined),
+                            CustomTextField(hint: "Ingresa tu correo electrónico", icon: Icons.email_outlined, controller: _emailController),
                             const SizedBox(height: 16),
-                            const CustomTextField(hint: "Ingresa tu número de teléfono", icon: Icons.phone),
+                            
+                            // <- AQUÍ ESTÁ EL CAMPO DE CONTRASEÑA NUEVO
+                            CustomTextField(hint: "Crea tu contraseña", icon: Icons.lock_outline, obscure: true, controller: _passwordController),
+                            const SizedBox(height: 16),
+                            
+                            CustomTextField(hint: "Ingresa tu número de teléfono", icon: Icons.phone, controller: _phoneController),
                             const SizedBox(height: 16),
                             InkWell(
                               onTap: () => _selectDate(context),
@@ -111,7 +195,7 @@ class _RegisterState extends State<Register> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const CustomTextField(hint: "Ingresa tu dirección", icon: Icons.location_on),
+                            CustomTextField(hint: "Ingresa tu dirección", icon: Icons.location_on, controller: _addressController),
                             const SizedBox(height: 16),
                             Container(
                               decoration: BoxDecoration(
@@ -151,16 +235,12 @@ class _RegisterState extends State<Register> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const CustomTextField(hint: "Cuéntanos sobre tu experiencia laboral", icon: Icons.work),
+                            CustomTextField(hint: "Cuéntanos sobre tu experiencia laboral", icon: Icons.work, controller: _experienceController),
                             const SizedBox(height: 28),
+                            
                             CustomButton(
                               text: "CONTINUAR A DOCUMENTACIÓN",
-                              onTap: () async {
-                                setState(() => _estaCargando = true);
-                                await Future.delayed(const Duration(seconds: 2));
-                                setState(() => _estaCargando = false);
-                                if (mounted) Navigator.pushNamed(context, '/documents');
-                              },
+                              onTap: _procesarRegistro, 
                             ),
                           ],
                         ),
