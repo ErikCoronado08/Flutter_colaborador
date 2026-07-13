@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // <--- INTEGRACIÓN INTL
+import 'package:intl/intl.dart';
+import '../../services/finanzas_service.dart';
 
 class HistorialServiciosView extends StatefulWidget {
   const HistorialServiciosView({super.key});
@@ -9,30 +10,26 @@ class HistorialServiciosView extends StatefulWidget {
 }
 
 class _HistorialServiciosViewState extends State<HistorialServiciosView> {
-  // Cambiamos los Strings estáticos por datos reales (double y DateTime)
-  final List<Map<String, dynamic>> _todosLosServicios = [
-    {'cliente': 'María González López', 'folio': '20033', 'fecha': DateTime(2026, 5, 12, 14, 30), 'monto': 320.00, 'rating': 5, 'estado': 'Completado'},
-    {'cliente': 'Juan Carlos Pérez', 'folio': '20034', 'fecha': DateTime(2026, 5, 14, 10, 15), 'monto': 150.00, 'rating': 4, 'estado': 'Completado'},
-    {'cliente': 'Roberto Gómez', 'folio': '20035', 'fecha': DateTime(2026, 5, 15, 9, 0), 'monto': 850.00, 'rating': 0, 'estado': 'Cancelado'},
-    {'cliente': 'Ana Sofía Martínez', 'folio': '20036', 'fecha': DateTime(2026, 5, 18, 16, 45), 'monto': 420.00, 'rating': 5, 'estado': 'Completado'},
-    {'cliente': 'Luis Hernández', 'folio': '20037', 'fecha': DateTime(2026, 5, 20, 11, 20), 'monto': 600.00, 'rating': 0, 'estado': 'En proceso'},
-  ];
-
-  List<Map<String, dynamic>> _serviciosFiltrados = [];
+  final FinanzasService _service = FinanzasService();
+  List<dynamic> _serviciosFiltrados = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _serviciosFiltrados = List.from(_todosLosServicios);
+    _cargarDatos();
   }
 
-  void _filtrarServicios(String query) {
-    setState(() {
-      _serviciosFiltrados = _todosLosServicios.where((s) => 
-        s['cliente'].toLowerCase().contains(query.toLowerCase()) || 
-        s['folio'].contains(query)
-      ).toList();
-    });
+  Future<void> _cargarDatos() async {
+    try {
+      final datos = await _service.obtenerHistorial();
+      setState(() {
+        _serviciosFiltrados = datos;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -46,51 +43,32 @@ class _HistorialServiciosViewState extends State<HistorialServiciosView> {
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.black87), onPressed: () => Navigator.pop(context)),
       ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            _buildSearchBar(),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _serviciosFiltrados.length,
-                itemBuilder: (context, index) => _buildServiceCard(_serviciosFiltrados[index]),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _serviciosFiltrados.length,
+                      itemBuilder: (context, index) => _buildServiceCard(_serviciosFiltrados[index]),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildSearchBar() {
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
-      child: TextField(
-        onChanged: _filtrarServicios,
-        decoration: const InputDecoration(
-          hintText: 'Buscar cliente o folio...',
-          prefixIcon: Icon(Icons.search, color: Color(0xFFE26112)),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 14),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildServiceCard(Map<String, dynamic> item) {
-    // ---> APLICACIÓN DE INTL PARA MONEDAS Y FECHAS <---
+  Widget _buildServiceCard(dynamic item) {
     final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
-    final formatoFecha = DateFormat('dd MMM • HH:mm', 'es'); // Requiere que 'es' esté inicializado en main.dart
-    
-    final montoFormateado = formatoMoneda.format(item['monto']);
-    final fechaFormateada = formatoFecha.format(item['fecha'] as DateTime);
-    // ---> FIN APLICACIÓN <---
+    final montoFormateado = formatoMoneda.format(double.parse(item['monto'].toString()));
 
     return InkWell(
-      onTap: () => Navigator.pushNamed(context, '/liquidacion'),
+      // AQUÍ ENVIAMOS EL ID REAL A LA SIGUIENTE PANTALLA
+      onTap: () => Navigator.pushNamed(context, '/liquidacion', arguments: item['id_real']),
       borderRadius: BorderRadius.circular(20),
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
@@ -111,15 +89,13 @@ class _HistorialServiciosViewState extends State<HistorialServiciosView> {
                 children: [
                   Text(item['cliente'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 4),
-                  // Usamos la fecha formateada
-                  Text('Folio: ${item['folio']} • $fechaFormateada', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text('Folio: ${item['folio']}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Usamos el monto formateado
                 Text(montoFormateado, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE26112))),
                 const SizedBox(height: 4),
                 Text(item['estado'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: item['estado'] == 'Completado' ? Colors.green : Colors.red)),

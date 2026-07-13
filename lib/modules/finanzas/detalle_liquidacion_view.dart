@@ -1,9 +1,11 @@
-import 'dart:typed_data'; // <--- Para manejar los bytes del archivo PDF
+import 'dart:typed_data'; 
 import 'package:flutter/material.dart';
-import 'package:pdf/pdf.dart'; // <--- Plugin PDF
-import 'package:pdf/widgets.dart' as pw; // <--- Widgets del PDF
-import 'package:printing/printing.dart'; // <--- Plugin Printing
-import 'package:share_plus/share_plus.dart'; // <--- Plugin Share Plus
+import 'package:pdf/pdf.dart'; 
+import 'package:pdf/widgets.dart' as pw; 
+import 'package:printing/printing.dart'; 
+import 'package:share_plus/share_plus.dart'; 
+import 'package:intl/intl.dart';
+import '../../services/finanzas_service.dart';
 
 class DetalleLiquidacionView extends StatefulWidget {
   const DetalleLiquidacionView({super.key});
@@ -14,6 +16,47 @@ class DetalleLiquidacionView extends StatefulWidget {
 
 class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
   int _tabActivo = 0;
+  bool _isLoading = true;
+  Map<String, dynamic>? _datos;
+  final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
+  
+  String? _idServicio; // Variable para almacenar el ID que viene de la pantalla anterior
+
+  @override
+  void initState() {
+    super.initState();
+    // Quitamos la carga de datos de aquí porque necesitamos esperar al context
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // ATRAPAMOS EL ID ENVIADO DESDE EL HISTORIAL
+    if (_idServicio == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args != null && args is String) {
+        _idServicio = args;
+        _cargarDetalle(); 
+      } else {
+        // Manejo de error en caso de entrar a la pantalla sin argumentos
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _cargarDetalle() async {
+    if (_idServicio == null) return;
+    try {
+      // USAMOS EL ID DINÁMICO PARA CONSULTAR A LARAVEL
+      final data = await FinanzasService().obtenerDetalle(_idServicio!); 
+      setState(() {
+        _datos = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,68 +65,52 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF4D2214)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Detalle de Liquidación',
-          style: TextStyle(color: Color(0xFF4D2214), fontWeight: FontWeight.bold, fontSize: 18),
-        ),
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Color(0xFF4D2214)), onPressed: () => Navigator.pop(context)),
+        title: const Text('Detalle de Liquidación', style: TextStyle(color: Color(0xFF4D2214), fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share, color: Color(0xFF4D2214)), 
-            onPressed: () => _mostrarAccionFactura(context, 'compartir'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.description_outlined, color: Color(0xFF4D2214)), 
-            onPressed: () => _mostrarAccionFactura(context, 'imprimir'),
-          ),
+          IconButton(icon: const Icon(Icons.ios_share, color: Color(0xFF4D2214)), onPressed: () => _mostrarAccionFactura(context, 'compartir')),
+          IconButton(icon: const Icon(Icons.description_outlined, color: Color(0xFF4D2214)), onPressed: () => _mostrarAccionFactura(context, 'imprimir')),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 6))
-                ],
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
+        : _datos == null 
+            ? const Center(child: Text("Error al cargar los datos del servicio"))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 6))]),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 25),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildTopTag(0, 'Monto Bruto'),
+                              const SizedBox(width: 8),
+                              _buildTopTag(1, 'Comisión'),
+                            ],
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(24, 35, 24, 20),
+                            child: Text('Desglose financiero', style: TextStyle(color: Color(0xFF4D2214), fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                          _construirContenidoDinamico(),
+                          const SizedBox(height: 30),
+                          _buildGananciaNetaCard(),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 25),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildTopTag(0, 'Monto Bruto'),
-                      const SizedBox(width: 8),
-                      _buildTopTag(1, 'Comisión'),
-                      const SizedBox(width: 8),
-                      _buildTopTag(2, 'Impuestos'),
-                    ],
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(24, 35, 24, 20),
-                    child: Text('Desglose financiero', style: TextStyle(color: Color(0xFF4D2214), fontSize: 18, fontWeight: FontWeight.bold)),
-                  ),
-                  _construirContenidoDinamico(),
-                  const SizedBox(height: 30),
-                  _buildGananciaNetaCard(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
     );
   }
 
@@ -93,40 +120,28 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
       onTap: () => setState(() => _tabActivo = index),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE26112) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected ? null : Border.all(color: Colors.grey.shade300),
-        ),
+        decoration: BoxDecoration(color: isSelected ? const Color(0xFFE26112) : Colors.white, borderRadius: BorderRadius.circular(20), border: isSelected ? null : Border.all(color: Colors.grey.shade300)),
         child: Text(text, style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF4D2214), fontSize: 11, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
   Widget _construirContenidoDinamico() {
+    final bruto = formatoMoneda.format(double.parse(_datos!['monto_bruto'].toString()));
+    final comision = formatoMoneda.format(double.parse(_datos!['comision_app'].toString()));
+    final costoTrans = formatoMoneda.format(double.parse(_datos!['costo_transaccion'].toString()));
+
     if (_tabActivo == 0) {
       return Column(children: [
-        _buildFinanceItem(icon: Icons.attach_money, label: 'Monto Bruto', value: '+\$1250.00', color: const Color(0xFF2E7D32)),
+        _buildFinanceItem(icon: Icons.attach_money, label: 'Monto Bruto', value: '+$bruto', color: const Color(0xFF2E7D32)),
         const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.credit_card_outlined, label: 'Comisión App', value: '-\$70.00', color: const Color(0xFFE26112)),
-        const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.assignment_turned_in_outlined, label: 'Retención Impuestos', value: '-\$0.00', color: Colors.grey),
-      ]);
-    } else if (_tabActivo == 1) {
-      return Column(children: [
-        _buildFinanceItem(icon: Icons.pie_chart_outline, label: 'Tarifa de plataforma (5%)', value: '-\$62.50', color: const Color(0xFFE26112)),
-        const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.local_atm, label: 'Costo fijo por transacción', value: '-\$7.50', color: const Color(0xFFE26112)),
-        const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.functions, label: 'Total Comisión', value: '-\$70.00', color: const Color(0xFF4D2214)),
+        _buildFinanceItem(icon: Icons.credit_card_outlined, label: 'Comisión App', value: comision, color: const Color(0xFFE26112)),
       ]);
     } else {
       return Column(children: [
-        _buildFinanceItem(icon: Icons.account_balance, label: 'Monto Gravable Base', value: '\$1180.00', color: Colors.grey.shade700),
+        _buildFinanceItem(icon: Icons.pie_chart_outline, label: 'Tarifa de plataforma', value: comision, color: const Color(0xFFE26112)),
         const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.receipt_long, label: 'Retención de IVA (8%)', value: '-\$0.00', color: Colors.grey),
-        const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.request_quote_outlined, label: 'Retención de ISR (1%)', value: '-\$0.00', color: Colors.grey),
+        _buildFinanceItem(icon: Icons.local_atm, label: 'Costo por transacción', value: costoTrans, color: const Color(0xFFE26112)),
       ]);
     }
   }
@@ -146,6 +161,7 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
   }
 
   Widget _buildGananciaNetaCard() {
+    final neta = formatoMoneda.format(double.parse(_datos!['ganancia_neta'].toString()));
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(24),
@@ -156,35 +172,26 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Ganancia Neta', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
-                  SizedBox(height: 4),
-                  Text('\$800.00', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                  Text('MXN', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  const Text('Ganancia Neta', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Text(neta, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 ],
               ),
               Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.card_giftcard, color: Colors.white, size: 24))
             ],
           ),
-          const SizedBox(height: 20),
-          Stack(
-            children: [
-              Container(width: double.infinity, height: 6, decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(10))),
-              Container(width: 220, height: 6, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10))),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text('80% del monto bruto', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-  // --- INICIO INTEGRACIÓN PDF ---
   Future<Uint8List> _generarPdfFactura() async {
     final pdf = pw.Document();
+    final bruto = formatoMoneda.format(double.parse(_datos!['monto_bruto'].toString()));
+    final neta = formatoMoneda.format(double.parse(_datos!['ganancia_neta'].toString()));
 
     pdf.addPage(
       pw.Page(
@@ -193,52 +200,28 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Header(
-                level: 0,
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('JOBHUB - RECIBO DE LIQUIDACION', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange800)),
-                    pw.Text('Folio #20033'),
-                  ],
-                ),
-              ),
+              pw.Header(level: 0, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('JOBHUB - RECIBO DE LIQUIDACION', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange800)), pw.Text('Folio #${_datos!['id_servicio']}')])),
               pw.SizedBox(height: 20),
-              pw.Text('Fecha de emision: 12 May 2026'),
-              pw.Text('Colaborador: Eduardo (Demo)'),
-              pw.SizedBox(height: 30),
               pw.TableHelper.fromTextArray(
                 context: context,
-                data: const <List<String>>[
+                data: <List<String>>[
                   ['Concepto', 'Monto'],
-                  ['Ingreso Bruto por Servicio', '\$1250.00'],
-                  ['Comision App (5%)', '-\$62.50'],
-                  ['Costo Fijo Transaccion', '-\$7.50'],
-                  ['Retencion Impuestos', '\$0.00'],
+                  ['Ingreso Bruto por Servicio', bruto],
+                  ['Comision App', _datos!['comision_app'].toString()],
+                  ['Costo Fijo Transaccion', _datos!['costo_transaccion'].toString()],
                 ],
               ),
               pw.SizedBox(height: 20),
               pw.Divider(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('GANANCIA NETA:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('\$800.00 MXN', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
-                ],
-              ),
-              pw.SizedBox(height: 50),
-              pw.Center(child: pw.Text('Documento generado automaticamente por JobHub App.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey))),
+              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('GANANCIA NETA:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)), pw.Text(neta, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.green700))]),
             ],
           );
         },
       ),
     );
-
-    return pdf.save(); // Retorna el archivo en formato de bytes
+    return pdf.save();
   }
-  // --- FIN INTEGRACIÓN PDF ---
 
-  // Lógica funcional de Facturación actualizada con Plugins
   void _mostrarAccionFactura(BuildContext context, String accion) {
     showModalBottomSheet(
       context: context,
@@ -255,42 +238,26 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
               Icon(accion == 'compartir' ? Icons.ios_share : Icons.picture_as_pdf, size: 60, color: const Color(0xFFE26112)),
               const SizedBox(height: 16),
               Text(accion == 'compartir' ? 'Compartir Recibo' : 'Descargar Factura', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF4D2214))),
-              const SizedBox(height: 8),
-              Text(accion == 'compartir' ? '¿Deseas enviar el recibo del folio #20033 a través de WhatsApp o Correo?' : 'La factura fiscal en formato PDF está lista para guardarse en tu dispositivo.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
               const SizedBox(height: 30),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE26112), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  
-                  // ---> INICIO INTEGRACIÓN SHARE_PLUS Y PRINTING <---
                   onPressed: () async {
-                    Navigator.pop(context); // Cierra el modal de inmediato
-                    
-                    // Mostramos indicador de carga nativo
+                    Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generando documento PDF...')));
-                    
                     try {
-                      // 1. Generamos el PDF en memoria usando el plugin 'pdf'
                       final Uint8List pdfBytes = await _generarPdfFactura();
-                      
                       if (accion == 'compartir') {
-                        // 2. Usamos share_plus para enviarlo
-                        final xFile = XFile.fromData(pdfBytes, name: 'JobHub_Recibo_20033.pdf', mimeType: 'application/pdf');
-                        await Share.shareXFiles([xFile], text: 'Aquí tienes el recibo de liquidación de mi servicio en JobHub.');
+                        final xFile = XFile.fromData(pdfBytes, name: 'JobHub_Recibo_${_datos!['id_servicio']}.pdf', mimeType: 'application/pdf');
+                        await Share.shareXFiles([xFile], text: 'Aquí tienes el recibo de liquidación.');
                       } else {
-                        // 3. Usamos printing para mostrar la vista previa y guardar
-                        await Printing.layoutPdf(
-                          onLayout: (PdfPageFormat format) async => pdfBytes,
-                          name: 'JobHub_Factura_20033',
-                        );
+                        await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdfBytes, name: 'JobHub_Factura_${_datos!['id_servicio']}');
                       }
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
                     }
                   },
-                  // ---> FIN INTEGRACIÓN <---
-                  
                   child: Text(accion == 'compartir' ? 'Compartir ahora' : 'Guardar / Imprimir PDF', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),

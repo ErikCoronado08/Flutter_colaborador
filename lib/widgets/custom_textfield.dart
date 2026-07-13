@@ -22,56 +22,26 @@ class CustomTextField extends StatelessWidget {
       // 3. Se lo asignamos al TextField nativo
       controller: controller, 
       obscureText: obscure,
-
-      style: const TextStyle(
-        color: Colors.black,
-        fontSize: 15,
-      ),
-
+      style: const TextStyle(color: Colors.black, fontSize: 15),
       cursorColor: const Color(0xFFC86428),
-
       decoration: InputDecoration(
         hintText: hint,
-
-        hintStyle: const TextStyle(
-          color: Color(0xFF888888),
-          fontSize: 14,
-        ),
-
-        prefixIcon: Icon(
-          icon,
-          color: const Color(0xFFC86428),
-        ),
-
+        hintStyle: const TextStyle(color: Color(0xFF888888), fontSize: 14),
+        prefixIcon: Icon(icon, color: const Color(0xFFC86428)),
         filled: true,
         fillColor: Colors.white,
-
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 18,
-        ),
-
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: Color(0xFFE0E0E0),
-            width: 1.2,
-          ),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0), width: 1.2),
         ),
-
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: Color(0xFFC86428),
-            width: 2,
-          ),
+          borderSide: const BorderSide(color: Color(0xFFC86428), width: 2),
         ),
-
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: Color(0xFFE0E0E0),
-          ),
+          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
         ),
       ),
     );
