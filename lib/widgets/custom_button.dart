@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 class CustomButton extends StatelessWidget {
   final String text;
-  final VoidCallback onTap;
+  final VoidCallback? onTap; // Cambiado a VoidCallback? (nullable)
 
   const CustomButton({
     super.key,
     required this.text,
-    required this.onTap,
+    this.onTap, // Ya no es 'required' porque ahora puede ser null
   });
 
   @override
@@ -16,26 +16,19 @@ class CustomButton extends StatelessWidget {
       width: double.infinity,
       height: 58,
       child: ElevatedButton(
-        onPressed: onTap,
-
+        // Al pasar null a onPressed, el botón se deshabilita automáticamente
+        onPressed: onTap, 
         style: ElevatedButton.styleFrom(
           elevation: 0,
           backgroundColor: const Color(0xFFC86428),
-
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
-
-          padding: const EdgeInsets.symmetric(
-            vertical: 16,
-          ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
         ),
-
         child: Text(
           text,
-
           textAlign: TextAlign.center,
-
           style: const TextStyle(
             color: Colors.white,
             fontSize: 15,
