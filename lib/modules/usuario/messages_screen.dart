@@ -2,43 +2,114 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import '../operaciones/conversation_screen.dart';
+import '../../services/api_service.dart'; // Asegúrate de ajustar la ruta de tu ApiService
 
-class MessagesScreen extends StatelessWidget {
+class MessagesScreen extends StatefulWidget {
   final bool standalone;
 
   const MessagesScreen({super.key, this.standalone = true});
 
   @override
+  State<MessagesScreen> createState() => _MessagesScreenState();
+}
+
+class _MessagesScreenState extends State<MessagesScreen> {
+  List<dynamic> _allChats = [];        // Conversaciones completas del servidor
+  List<dynamic> _filteredChats = [];   // Conversaciones filtradas por la barra de búsqueda
+  bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchChatsBackend();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Método para obtener los chats desde MongoDB
+  Future<void> _fetchChatsBackend() async {
+    setState(() => _isLoading = true);
+    final datosChats = await ApiService.obtenerChats(); // Asegúrate de tener este método en tu ApiService
+    setState(() {
+      if (datosChats != null) {
+        _allChats = datosChats;
+        _filteredChats = datosChats;
+      }
+      _isLoading = false;
+    });
+  }
+
+  // Filtrado local en base al input del usuario
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredChats = _allChats;
+      } else {
+        _filteredChats = _allChats.where((chat) {
+          final nombre = (chat['name'] ?? chat['contacto'] ?? '').toString().toLowerCase();
+          final ultimoMensaje = (chat['preview'] ?? chat['ultimoMensaje'] ?? '').toString().toLowerCase();
+          return nombre.contains(query) || ultimoMensaje.contains(query);
+        }).toList();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final body = ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      children: [
-        const Text(
-          'Bandeja de entrada',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        // Barra de búsqueda moderna
-        _buildSearchBar(),
-        
-        const SizedBox(height: 24),
-        
-        // Lista de Mensajes (Añadido un parámetro 'unread' para dar realismo)
-        _messageTile(context, 'María López', 'ML', '¿Llegarás a tiempo para la instalación?', '10:10 AM', unread: true),
-        _messageTile(context, 'Carlos Ruiz', 'CR', 'Confirmé el mantenimiento de la bomba de agua.', '9:42 AM', unread: false),
-        _messageTile(context, 'Sofía Hernández', 'SH', 'Necesito una revisión extra en la tubería.', '8:18 AM', unread: false),
-        _messageTile(context, 'Eduardo Torres', 'ET', 'Muchas gracias, el servicio quedó excelente.', 'Ayer', unread: false),
-      ],
+    final body = RefreshIndicator(
+      onRefresh: _fetchChatsBackend, // Pull to refresh
+      color: const Color(0xFFE26112),
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
+          : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              children: [
+                const Text(
+                  'Bandeja de entrada',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Barra de búsqueda moderna conectada al filtro
+                _buildSearchBar(),
+                
+                const SizedBox(height: 24),
+                
+                // Lista de Mensajes Dinámica
+                if (_filteredChats.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        _searchController.text.isEmpty
+                            ? 'No tienes mensajes aún'
+                            : 'No se encontraron chats',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else
+                  ..._filteredChats.map((chat) => _buildMessageTile(context, chat as Map<String, dynamic>)).toList(),
+              ],
+            ),
     );
 
-    return standalone
+    return widget.standalone
         ? Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA), // Fondo claro
+            backgroundColor: const Color(0xFFF8F9FA),
             appBar: AppBar(
               backgroundColor: Colors.white,
               elevation: 0,
@@ -51,7 +122,7 @@ class MessagesScreen extends StatelessWidget {
             ),
             body: body,
           )
-        : body;
+        : Scaffold(backgroundColor: const Color(0xFFF8F9FA), body: body);
   }
 
   Widget _buildSearchBar() {
@@ -62,10 +133,17 @@ class MessagesScreen extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: TextField(
+        controller: _searchController,
         decoration: InputDecoration(
           hintText: 'Buscar mensajes...',
           hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
           prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, color: Colors.grey.shade400, size: 18),
+                  onPressed: () => _searchController.clear(),
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
@@ -73,7 +151,20 @@ class MessagesScreen extends StatelessWidget {
     );
   }
 
-  Widget _messageTile(BuildContext context, String name, String initials, String preview, String time, {bool unread = false}) {
+  Widget _buildMessageTile(BuildContext context, Map<String, dynamic> chat) {
+    // Mapeo flexible para soportar nombres de llaves de tu backend (Ej: MongoDB)
+    final String name = chat['name'] ?? chat['contacto'] ?? 'Usuario';
+    final String preview = chat['preview'] ?? chat['ultimoMensaje'] ?? '';
+    final String time = chat['time'] ?? chat['hora'] ?? '';
+    final bool unread = chat['unread'] ?? chat['noLeido'] ?? false;
+    
+    // Obtener iniciales automáticamente del nombre recibido
+    final String initials = name.isNotEmpty 
+        ? name.trim().split(' ').map((l) => l[0]).take(2).join().toUpperCase()
+        : 'U';
+
+    final Color statusBorderColor = unread ? const Color(0xFFE26112).withValues(alpha: 0.3) : Colors.grey.shade200;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -92,15 +183,14 @@ class MessagesScreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          // Borde naranja si no está leído, borde gris sutil si ya se leyó
-          border: Border.all(color: unread ? const Color(0xFFE26112).withOpacity(0.3) : Colors.grey.shade200),
+          border: Border.all(color: statusBorderColor),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))
           ],
         ),
         child: Row(
           children: [
-            // Avatar con indicador
+            // Avatar con indicador en red o Shimmer loader
             Stack(
               children: [
                 ClipRRect(
@@ -113,15 +203,11 @@ class MessagesScreen extends StatelessWidget {
                     placeholder: (context, url) => Shimmer.fromColors(
                       baseColor: Colors.grey.shade300,
                       highlightColor: Colors.grey.shade100,
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        color: Colors.grey.shade300,
-                      ),
+                      child: Container(width: 48, height: 48, color: Colors.grey.shade300),
                     ),
                     errorWidget: (context, url, error) => CircleAvatar(
                       radius: 24,
-                      backgroundColor: unread ? const Color(0xFFE26112).withOpacity(0.1) : Colors.grey.shade100,
+                      backgroundColor: unread ? const Color(0xFFE26112).withValues(alpha: 0.1) : Colors.grey.shade100,
                       child: Text(
                         initials,
                         style: TextStyle(
@@ -151,7 +237,7 @@ class MessagesScreen extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             
-            // Textos centrales
+            // Textos centrales (Nombre y último mensaje)
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,7 +266,7 @@ class MessagesScreen extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             
-            // Hora y Badge
+            // Hora y número de mensajes pendientes
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -206,7 +292,7 @@ class MessagesScreen extends StatelessWidget {
                     ),
                   )
                 else
-                  const SizedBox(height: 20), // Placeholder para mantener la alineación de las tarjetas
+                  const SizedBox(height: 20),
               ],
             ),
           ],

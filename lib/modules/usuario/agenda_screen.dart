@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import '../operaciones/service_detail_screen.dart';
+import '../../services/api_service.dart'; // Importa el ApiService
 
 class AgendaScreen extends StatefulWidget {
   final bool standalone;
@@ -13,45 +14,64 @@ class AgendaScreen extends StatefulWidget {
 }
 
 class _AgendaScreenState extends State<AgendaScreen> {
-  DateTime selectedDate = DateTime(2026, 5, 19);
-  DateTime focusedDay = DateTime(2026, 5, 19);
+  // Ajustado a las fechas actuales de desarrollo en 2026
+  DateTime selectedDate = DateTime(2026, 7, 6);
+  DateTime focusedDay = DateTime(2026, 7, 6);
+  
+  // Variables de control de estado del Backend
+  List<dynamic> appointments = [];
+  bool cargando = true;
 
-  final List<Map<String, String>> appointments = [
-    {
-      'name': 'María García',
-      'service': 'Limpieza general',
-      'time': '09:00 - 11:00',
-      'location': 'Col. Roma Norte',
-      'status': 'Confirmado',
-    },
-    {
-      'name': 'Carlos López',
-      'service': 'Plomería',
-      'time': '14:00 - 16:00',
-      'location': 'Col. Condesa',
-      'status': 'Pendiente',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchAgendaBackend(); // Carga inicial
+  }
+
+  // Método para obtener la agenda desde MongoDB
+  Future<void> _fetchAgendaBackend() async {
+    setState(() => cargando = true);
+    final datosAgenda = await ApiService.obtenerAgenda();
+    setState(() {
+      if (datosAgenda != null) {
+        appointments = datosAgenda;
+      }
+      cargando = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final body = SafeArea(
       child: Stack(
         children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80), // Espacio para el botón flotante
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 24),
-                _buildCalendarCard(),
-                const SizedBox(height: 32),
-                _buildDaySummary(),
-                const SizedBox(height: 16),
-                ...appointments.map(_buildAppointmentCard).toList(),
-              ],
-            ),
+          RefreshIndicator(
+            onRefresh: _fetchAgendaBackend, // Deslizar para recargar
+            color: const Color(0xFFE26112),
+            child: cargando
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
+                : SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(),
+                        const SizedBox(height: 24),
+                        _buildCalendarCard(),
+                        const SizedBox(height: 32),
+                        _buildDaySummary(),
+                        const SizedBox(height: 16),
+                        if (appointments.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Center(child: Text('No hay servicios en la agenda', style: TextStyle(color: Colors.grey))),
+                          )
+                        else
+                          ...appointments.map((app) => _buildAppointmentCard(app as Map<String, dynamic>)).toList(),
+                      ],
+                    ),
+                  ),
           ),
           
           // Botón Flotante de Agregar Cita
@@ -94,19 +114,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
       children: [
         const Text(
           'Mi Calendario',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
         const SizedBox(height: 4),
         Text(
           'Revisa y organiza tus servicios',
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
         ),
       ],
     );
@@ -121,7 +134,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 5), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -149,7 +162,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
               titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
             ),
             calendarStyle: CalendarStyle(
-              todayDecoration: BoxDecoration(color: const Color(0xFFE26112).withValues(alpha: 51), shape: BoxShape.circle),
+              todayDecoration: BoxDecoration(color: const Color(0xFFE26112).withValues(alpha: 0.2), shape: BoxShape.circle),
               selectedDecoration: const BoxDecoration(color: Color(0xFFE26112), shape: BoxShape.circle),
               selectedTextStyle: const TextStyle(color: Colors.white),
               todayTextStyle: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
@@ -196,8 +209,15 @@ class _AgendaScreenState extends State<AgendaScreen> {
     );
   }
 
-  Widget _buildAppointmentCard(Map<String, String> appointment) {
-    final bool confirmed = appointment['status'] == 'Confirmado';
+  Widget _buildAppointmentCard(Map<String, dynamic> appointment) {
+    // Mapeo flexible para soportar tanto llaves mock anteriores como las de MongoDB
+    final String cliente = appointment['name'] ?? appointment['cliente'] ?? 'Cliente';
+    final String servicio = appointment['service'] ?? appointment['tipo'] ?? 'Servicio';
+    final String horario = appointment['time'] ?? appointment['hora'] ?? 'Por definir';
+    final String ubicacion = appointment['location'] ?? appointment['distancia'] ?? 'Ubicación remota';
+    final String estado = appointment['status'] ?? appointment['estado'] ?? 'Pendiente';
+
+    final bool confirmed = estado.toLowerCase() == 'confirmado';
     final Color statusColor = confirmed ? Colors.green : Colors.orange;
 
     return GestureDetector(
@@ -206,11 +226,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => ServiceDetailScreen(
-              clientName: appointment['name'] ?? '',
-              serviceType: appointment['service'] ?? '',
-              time: appointment['time'] ?? '',
-              distance: appointment['location'] ?? '',
-              status: appointment['status'] ?? '',
+              clientName: cliente,
+              serviceType: servicio,
+              time: horario,
+              distance: ubicacion,
+              status: estado,
             ),
           ),
         );
@@ -223,7 +243,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 5), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
         child: Column(
@@ -238,12 +258,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        appointment['name'] ?? '',
+                        cliente,
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        appointment['service'] ?? '',
+                        servicio,
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                       ),
                     ],
@@ -252,11 +272,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 26),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    appointment['status'] ?? '',
+                    estado,
                     style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
                   ),
                 ),
@@ -265,10 +285,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                _buildInfoChip(Icons.schedule, appointment['time'] ?? ''),
+                _buildInfoChip(Icons.schedule, horario),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _buildInfoChip(Icons.location_on_outlined, appointment['location'] ?? ''),
+                  child: _buildInfoChip(Icons.location_on_outlined, ubicacion),
                 ),
               ],
             ),
@@ -325,7 +345,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 TextField(controller: locationController, decoration: const InputDecoration(labelText: 'Ubicación (Colonia)')),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: status,
+                  value: status,
                   decoration: InputDecoration(
                     labelText: 'Estado',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

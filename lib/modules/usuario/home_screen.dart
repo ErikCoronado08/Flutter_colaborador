@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../theme/app_colors.dart';
 import '../operaciones/service_detail_screen.dart';
+import '../../services/api_service.dart'; // Asegúrate de importar tu servicio nuevo
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,14 +15,22 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool disponible = true;
+  bool cargando = true;
   late SharedPreferences _prefs;
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  // Variables para guardar los datos reales del Backend NoSQL
+  String nombreUsuario = 'Cargando...';
+  String gananciasHoy = '0';
+  String serviciosCompletados = '0';
+  List<dynamic> proximosServicios = [];
 
   @override
   void initState() {
     super.initState();
     _initializePreferences();
     _initializeNotifications();
+    _cargarDatosBackend(); // Llamada inicial a la API
   }
 
   Future<void> _initializePreferences() async {
@@ -61,33 +70,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  final List<Map<String, String>> upcomingServices = [
-    {
-      'initials': 'MG',
-      'name': 'María García',
-      'service': 'Limpieza general',
-      'time': '10:00 AM',
-      'distance': '2.5 km',
-      'status': 'Confirmado',
-      'avatarUrl': 'https://picsum.photos/seed/mg/100',
-    },
-    {
-      'initials': 'CL',
-      'name': 'Carlos López',
-      'service': 'Plomería',
-      'time': '5:30 PM',
-      'distance': '8.1 km',
-      'status': 'Pendiente',
-      'avatarUrl': 'https://picsum.photos/seed/cl/100',
-    },
-  ];
+  // Método unificado de carga asíncrona
+  Future<void> _cargarDatosBackend() async {
+    setState(() => cargando = true);
+
+    final perfil = await ApiService.obtenerPerfil();
+    final estadisticas = await ApiService.obtenerEstadisticas();
+    final agenda = await ApiService.obtenerAgenda();
+
+    setState(() {
+      if (perfil != null) {
+        nombreUsuario = perfil['name'] ?? 'Colaborador';
+      }
+      if (estadisticas != null) {
+        // Formatear o extraer los datos numéricos de MongoDB
+        gananciasHoy = estadisticas['ingresos_generados']?.toString() ?? '0';
+        serviciosCompletados = estadisticas['servicios_completados']?.toString() ?? '0';
+      }
+      if (agenda != null) {
+        proximosServicios = agenda;
+      }
+      cargando = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: _buildDashboard(context),
+        child: RefreshIndicator(
+          onRefresh: _cargarDatosBackend, // Permite arrastrar hacia abajo para actualizar
+          child: cargando 
+              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              : _buildDashboard(context),
+        ),
       ),
     );
   }
@@ -106,7 +123,13 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 32),
         _buildUpcomingHeader(),
         const SizedBox(height: 16),
-        ...upcomingServices.map((service) => _buildUpcomingServiceCard(service, context)),
+        if (proximosServicios.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: Text('No tienes servicios pendientes', style: TextStyle(color: AppColors.textSecondary))),
+          )
+        else
+          ...proximosServicios.map((service) => _buildUpcomingServiceCard(service, context)),
         const SizedBox(height: 24),
       ],
     );
@@ -121,17 +144,16 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Icon(Icons.person, color: Colors.white, size: 26),
         ),
         const SizedBox(width: 16),
-        // 👉 SOLUCIÓN OVERFLOW 1: Expanded envuelve los textos del header
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text('Bienvenido de nuevo', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
-              SizedBox(height: 4),
+            children: [
+              const Text('Bienvenido de nuevo', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
               Text(
-                '¡Hola, Eduardo!', 
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                overflow: TextOverflow.ellipsis, // Si el nombre es muy largo, pone "..."
+                '¡Hola, $nombreUsuario!', 
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -177,7 +199,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 👉 SOLUCIÓN OVERFLOW 2: Expanded envuelve el texto del switch
           Expanded(
             child: Row(
               children: [
@@ -224,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFF8C3B), Color(0xFFFF5B22)]),
         boxShadow: [
-          BoxShadow(color: const Color(0xFFFF5B22).withValues(alpha: 77), blurRadius: 15, offset: const Offset(0, 8)),
+          BoxShadow(color: const Color(0xFFFF5B22).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
         ],
       ),
       child: Column(
@@ -233,46 +254,46 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Ganancias de hoy', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
-              Icon(Icons.trending_up, color: Colors.white.withValues(alpha: 204), size: 20),
+              const Text('Ganancias Históricas', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
+              Icon(Icons.trending_up, color: Colors.white.withValues(alpha: 0.8), size: 20),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
-              Text('\$2,450', style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
-              SizedBox(width: 6),
-              Padding(
+            children: [
+              Text('\$$gananciasHoy', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+              const SizedBox(width: 6),
+              const Padding(
                 padding: EdgeInsets.only(bottom: 6),
                 child: Text('MXN', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600)),
               ),
             ],
           ),
           const SizedBox(height: 24),
-          Container(height: 1, color: Colors.white.withValues(alpha: 51)),
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.2)),
           const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Esta semana', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    SizedBox(height: 4),
-                    Text('\$12,350 MXN', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                  children: [
+                    const Text('Total completados', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('$serviciosCompletados servicios', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
-              Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 51)),
+              Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 0.2)),
               const SizedBox(width: 20),
-              Expanded(
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Servicios hoy', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    SizedBox(height: 4),
-                    Text('5 completados', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                  children: [
+                    Text('Tipo de Cuenta', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('Premium', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -294,9 +315,9 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildSingleMetric(Icons.calendar_today, '8', 'Servicios'),
+          _buildSingleMetric(Icons.calendar_today, proximosServicios.length.toString(), 'Agendados'),
           Container(width: 1, height: 40, color: Colors.grey.shade200),
-          _buildSingleMetric(Icons.access_time, '4.5h', 'Activo'),
+          _buildSingleMetric(Icons.star_border, '4.8', 'Calificación'),
           Container(width: 1, height: 40, color: Colors.grey.shade200),
           _buildSingleMetric(Icons.location_on_outlined, '12 km', 'Ruta'),
         ],
@@ -329,8 +350,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildUpcomingServiceCard(Map<String, String> service, BuildContext context) {
-    final bool confirmed = service['status'] == 'Confirmado';
+  Widget _buildUpcomingServiceCard(dynamic service, BuildContext context) {
+    // Adaptación a la estructura que regresa tu tabla 'servicios' en Mongo
+    final String cliente = service['cliente'] ?? service['name'] ?? 'Cliente';
+    final String tipoServicio = service['tipo'] ?? service['service'] ?? 'Servicio';
+    final String hora = service['hora'] ?? service['time'] ?? 'Por definir';
+    final String distancia = service['distancia'] ?? service['distance'] ?? '0.0 km';
+    final String estado = service['estado'] ?? service['status'] ?? 'Pendiente';
+    final String iniciales = cliente.isNotEmpty ? cliente.substring(0, 2).toUpperCase() : 'SR';
+
+    final bool confirmed = estado.toLowerCase() == 'confirmado' || estado.toLowerCase() == 'activo';
     
     return GestureDetector(
       onTap: () {
@@ -338,11 +367,11 @@ class _HomeScreenState extends State<HomeScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => ServiceDetailScreen(
-              clientName: service['name'] ?? '',
-              serviceType: service['service'] ?? '',
-              time: service['time'] ?? '',
-              distance: service['distance'] ?? '',
-              status: service['status'] ?? '',
+              clientName: cliente,
+              serviceType: tipoServicio,
+              time: hora,
+              distance: distancia,
+              status: estado,
             ),
           ),
         );
@@ -354,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 5), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           children: [
@@ -365,19 +394,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 26),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   alignment: Alignment.center,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: CachedNetworkImage(
-                      imageUrl: service['avatarUrl'] ?? '',
+                      imageUrl: service['avatarUrl'] ?? 'https://picsum.photos/seed/$iniciales/100',
                       width: 48,
                       height: 48,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                      errorWidget: (context, url, error) => Text(service['initials'] ?? '', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)),
+                      errorWidget: (context, url, error) => Text(iniciales, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
                   ),
                 ),
@@ -386,20 +415,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(service['name'] ?? '', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      Text(cliente, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                       const SizedBox(height: 4),
-                      Text(service['service'] ?? '', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(tipoServicio, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
                     ],
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: confirmed ? AppColors.success.withValues(alpha: 26) : AppColors.warning.withValues(alpha: 26),
+                    color: confirmed ? AppColors.success.withValues(alpha: 0.1) : AppColors.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    service['status'] ?? '',
+                    estado,
                     style: TextStyle(color: confirmed ? AppColors.success : AppColors.warning, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -413,12 +442,11 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Icon(Icons.schedule, size: 18, color: Colors.grey.shade400),
                 const SizedBox(width: 6),
-                Text(service['time'] ?? '', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
-                // 👉 SOLUCIÓN OVERFLOW 3: Usamos Spacer() para que empuje dinámicamente y no rompa pantallas chicas
+                Text(hora, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
                 const Spacer(), 
                 Icon(Icons.location_on_outlined, size: 18, color: Colors.grey.shade400),
                 const SizedBox(width: 6),
-                Text(service['distance'] ?? '', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(distancia, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
               ],
             ),
           ],
