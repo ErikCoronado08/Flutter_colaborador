@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "923305570744",
+    "project_id": "proyecto-flutter-8007f",
+    "storage_bucket": "proyecto-flutter-8007f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:923305570744:android:73fd89230f739f948fdf4d",
+        "android_client_info": {
+          "package_name": "com.example.jobhub_colaborador"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "923305570744-pl1i3t9sc4sdlcqsld7i8mf0micjiaih.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.jobhub_colaborador",
+            "certificate_hash": "385278f4acee47964385aabe6fccb9d70ab9ff71"
+          }
+        },
+        {
+          "client_id": "923305570744-pvm4f5u07ht0pne9egs0d78boqt21lp6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcdN_BY38X1tWcadwsqRRRyGaNDGwhF80"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "923305570744-pvm4f5u07ht0pne9egs0d78boqt21lp6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

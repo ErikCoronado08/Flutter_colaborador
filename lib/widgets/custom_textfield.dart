@@ -1,21 +1,26 @@
-
 import 'package:flutter/material.dart';
 
 class CustomTextField extends StatelessWidget {
   final String hint;
   final IconData icon;
   final bool obscure;
+  // 1. Agregamos la variable para el controlador
+  final TextEditingController? controller; 
 
   const CustomTextField({
     super.key,
     required this.hint,
     required this.icon,
     this.obscure = false,
+    // 2. Lo pedimos en el constructor
+    this.controller, 
   });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
+      // 3. Se lo asignamos al TextField nativo
+      controller: controller, 
       obscureText: obscure,
 
       style: const TextStyle(
@@ -72,4 +77,3 @@ class CustomTextField extends StatelessWidget {
     );
   }
 }
-
