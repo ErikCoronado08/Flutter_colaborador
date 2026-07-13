@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class FinanzasService {
-  // Aquí irá la URL de tu API cuando la desplieguen
-  final String baseUrl = 'https://api.jobhub.com/v1/finanzas';
+  // URL local para probar el backend en la red del equipo
+  final String baseUrl = 'http://192.168.0.172:8000/api';
 
   // ---> INICIO INTEGRACIÓN HTTP <---
   Future<Map<String, dynamic>> obtenerSaldoUsuario(String userId) async {
