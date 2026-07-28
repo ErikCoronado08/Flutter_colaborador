@@ -5,7 +5,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
-import '../../../services/api_service.dart'; // Ajusta la ruta a tu api_service.dart
 
 class MapaServicioScreen extends StatefulWidget {
   final Map<String, dynamic> trabajo;
@@ -18,8 +17,8 @@ class MapaServicioScreen extends StatefulWidget {
 class _MapaServicioScreenState extends State<MapaServicioScreen> {
   final MapController _mapController = MapController();
   
-  // Coordenadas predeterminadas (Por si el GPS tarda) basadas en tu Mongo local
-  LatLng _posicionActual = LatLng(20.96, -89.61); 
+  // Coordenadas locales de respaldo por si falla la API
+  LatLng _posicionActual = const LatLng(20.96, -89.61); 
   late LatLng _coordenadasDestino;
   
   bool _cargando = true;
@@ -32,7 +31,7 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
   void initState() {
     super.initState();
     
-    // Extraer coordenadas de destino del JSON de MongoDB
+    // Tratamos de extraer coordenadas si existen en la respuesta del backend
     final ubicacion = widget.trabajo['ubicacion'];
     double destLat = 20.96;
     double destLng = -89.61;
@@ -60,7 +59,7 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
       );
       _posicionActual = LatLng(position.latitude, position.longitude);
     } catch (e) {
-      debugPrint("El GPS tardó, usando ubicación base predeterminada.");
+      debugPrint("El GPS tardó, usando ubicación base.");
     }
 
     await _obtenerRutaDesdeAPI();
@@ -100,41 +99,15 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
   void _generarLineaRectaRespaldo() {
     setState(() {
       _puntosRuta = [_posicionActual, _coordenadasDestino];
-      _tiempoEstimado = "12 min (Simulado)";
+      _tiempoEstimado = "Ruta directa generada";
     });
-  }
-
-  // 🚀 FUNCIÓN ASÍNCRONA PARA FINALIZAR EL TRABAJO
-  void _procesarFinalizacionTrabajo() async {
-    final String idServicio = (widget.trabajo['_id'] ?? widget.trabajo['id'] ?? '').toString();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.green)),
-    );
-
-    bool exito = await ApiService.finalizarServicio(idServicio);
-    Navigator.pop(context); // Quitar círculo de carga
-
-    if (exito) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Servicio finalizado con éxito en MongoDB!'), backgroundColor: Colors.green),
-      );
-      // Regresa al menú principal cerrando la vista del mapa
-      Navigator.pop(context); 
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al comunicar la finalización del servicio'), backgroundColor: Colors.red),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _cargando 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF6F00)))
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
         : Stack(
             children: [
               FlutterMap(
@@ -180,7 +153,7 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
               ),
 
               Positioned(
-                top: 60,
+                top: 50,
                 left: 20,
                 child: CircleAvatar(
                   backgroundColor: Colors.white,
@@ -192,32 +165,32 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
               ),
 
               Positioned(
-                top: 140,
+                top: 50,
                 left: MediaQuery.of(context).size.width * 0.25,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.black87,
                     borderRadius: BorderRadius.circular(25),
                   ),
                   child: Text(
-                    '🚗 Tiempo estimado: $_tiempoEstimado', // Corregido el nombre de la variable
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    '🚗 Tiempo estimado: $_tiempoEstimado', 
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
 
-              // BOTÓN INFERIOR CAMBIADO A ACCIÓN DE FINALIZAR TRABAJO REAL
               Positioned(
-                bottom: 20, left: 20, right: 20,
-                child: ElevatedButton(
+                bottom: 30, left: 20, right: 20,
+                child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    backgroundColor: Colors.blue.shade700,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: _procesarFinalizacionTrabajo,
-                  child: const Text('FINALIZAR TRABAJO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.location_on, color: Colors.white),
+                  label: const Text('VOLVER A LÍNEA DE TIEMPO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                 ),
               ),
             ],

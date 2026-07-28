@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../services/api_service.dart'; // Ajusta esta ruta según la estructura de tus carpetas
-import 'aceptado_screen.dart'; // Ajusta la ruta a tu pantalla verde
+import '../../services/api_service.dart'; 
+import 'aceptado_screen.dart'; 
 
 class SolicitudesScreen extends StatefulWidget {
-  const SolicitudesScreen({Key? key}) : super(key: key);
+  const SolicitudesScreen({super.key});
 
   @override
   State<SolicitudesScreen> createState() => _SolicitudesScreenState();
@@ -14,149 +14,196 @@ class _SolicitudesScreenState extends State<SolicitudesScreen> {
   bool _cargando = true;
 
   @override
-  void initState() { //  Corregido: Sin caracteres extraños
+  void initState() {
     super.initState();
     _cargarSolicitudesDesdeAPI();
   }
 
-  // ================================================
-  // 📥 LLAMADA A LA API DE LARAVEL PARA REFRESCAR DATOS
-  // ================================================
   Future<void> _cargarSolicitudesDesdeAPI() async {
     setState(() => _cargando = true);
-    
-    // Consume tu: Route::get('/operaciones/solicitudes')
     final datos = await ApiService.obtenerSolicitudes();
-    
     setState(() {
       _solicitudes = datos;
       _cargando = false;
     });
   }
 
-  // ================================================
-  // 🚀 ACCIÓN REAL AL PRESIONAR EL BOTÓN "ACEPTAR"
-  // ================================================
-  void _procesarAceptacionDirecta(BuildContext context, Map<String, dynamic> trabajo) async {
-    final String idMongo = (trabajo['_id'] ?? trabajo['id'] ?? '').toString();
+  // Abre un selector de fecha y hora para agendar el servicio antes de aceptarlo
+  Future<void> _mostrarDialogoAgendar(BuildContext context, Map<String, dynamic> solicitud) async {
+    final DateTime? fechaSeleccionada = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 1)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 60)),
+      builder: (context, child) => Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFFE26112))), child: child!),
+    );
 
-    if (idMongo.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: El documento no tiene un ID válido de MongoDB')),
-      );
-      return;
-    }
+    if (fechaSeleccionada == null) return;
 
-    // 1. Mostrar círculo de carga (Loading)
+    if (!context.mounted) return;
+    
+    final TimeOfDay? horaSeleccionada = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 10, minute: 0),
+      builder: (context, child) => Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Color(0xFFE26112))), child: child!),
+    );
+
+    if (horaSeleccionada == null) return;
+
+    _procesarAceptacion(solicitud, fechaSeleccionada, horaSeleccionada);
+  }
+
+  Future<void> _procesarAceptacion(Map<String, dynamic> solicitud, DateTime fecha, TimeOfDay hora) async {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFE26112))),
     );
 
-    // 2. Consumir la API de Laravel (ejecuta el $servicio->save() en Mongo)
-    bool guardadoExitoso = await ApiService.aceptarServicio(idMongo);
+    // Formateamos para que Laravel lo reciba correctamente
+    final String fechaFormateada = "${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}";
+    final String horaFormateada = "${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}:00";
 
-    // Ocultar círculo de carga
-    Navigator.pop(context);
+    final payload = {
+      'solicitud_servicio_id': solicitud['id'],
+      'cliente_id': solicitud['cliente_id'],
+      'servicio_socio_id': solicitud['servicio_socio_id'],
+      'fecha': fechaFormateada,
+      'hora': horaFormateada,
+    };
 
-    if (guardadoExitoso) {
-      // 3. Avanzar a la pantalla verde de éxito si Laravel guardó en MongoDB
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => AceptadoScreen(trabajo: trabajo, miRating: 5.0),
-        ),
-      ).then((_) {
-        // Al regresar de la pantalla del chat, vuelve a consultar la API 
-        // para quitar de la lista el servicio que ya aceptaste
-        _cargarSolicitudesDesdeAPI();
-      });
-    } else {
-      // Alerta visual si hubo fallas de comunicación
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo actualizar el estado en MongoDB local'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    bool guardadoExitoso = await ApiService.agendarSolicitud(payload);
+
+    if (mounted) {
+      Navigator.pop(context); // Quitar loader
+
+      if (guardadoExitoso) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AceptadoScreen(trabajo: solicitud, miRating: 5.0),
+          ),
+        ).then((_) => _cargarSolicitudesDesdeAPI());
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Hubo un error al agendar la solicitud. Intenta de nuevo.'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text('Solicitudes Disponibles'),
-        backgroundColor: Colors.orange,
+        title: const Text('Solicitudes de Clientes', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black87),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _cargarSolicitudesDesdeAPI,
-          )
+          IconButton(icon: const Icon(Icons.refresh, color: Color(0xFFE26112)), onPressed: _cargarSolicitudesDesdeAPI)
         ],
       ),
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
           : _solicitudes.isEmpty
-              ? const Center(child: Text('No hay servicios disponibles por el momento'))
+              ? _buildEmptyState()
               : RefreshIndicator(
                   onRefresh: _cargarSolicitudesDesdeAPI,
+                  color: const Color(0xFFE26112),
                   child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
                     itemCount: _solicitudes.length,
                     itemBuilder: (context, index) {
-                      final trabajo = _solicitudes[index] as Map<String, dynamic>;
+                      final solicitud = _solicitudes[index] as Map<String, dynamic>;
                       
-                      // Extraer campos dinámicos de MongoDB
-                      final cliente = trabajo['cliente'] ?? 'Cliente Desconocido';
-                      final categoria = trabajo['categoria'] ?? 'Servicio General';
-                      final descripcion = trabajo['descripcion'] ?? 'Sin descripción disponible';
-                      final precio = trabajo['precio'] ?? '0.00';
+                      // Extraemos los datos provenientes de AgendaColaboradorController@index
+                      final cliente = solicitud['cliente'] ?? 'Cliente Nuevo';
+                      final servicio = solicitud['servicio'] ?? 'Servicio Solicitado';
+                      final fechaSolicitud = solicitud['fecha_solicitud'] ?? '';
+                      final iniciales = cliente.substring(0, 1).toUpperCase();
 
-                      return Card(
-                        margin: const EdgeInsets.all(10),
-                        elevation: 4,
-                        child: Padding(
-                          padding: const EdgeInsets.all(15.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                cliente,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                'Categoría: $categoria',
-                                style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(descripcion),
-                              const SizedBox(height: 10),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '\$$precio MXN',
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.grey.shade200),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: const Color(0xFFE26112).withOpacity(0.1),
+                                  child: Text(iniciales, style: const TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold)),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(cliente, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                      Text(fechaSolicitud, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                                    ],
                                   ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    onPressed: () => _procesarAceptacionDirecta(context, trabajo),
-                                    child: const Text('Aceptar'),
-                                  ),
-                                ],
-                              )
-                            ],
-                          ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+                                  child: const Text('Nueva', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 11)),
+                                )
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(servicio, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF444444))),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE26112),
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                onPressed: () => _mostrarDialogoAgendar(context, solicitud),
+                                child: const Text('ACEPTAR Y AGENDAR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     },
                   ),
                 ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text('Sin solicitudes nuevas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+            const SizedBox(height: 8),
+            Text(
+              'Por el momento no tienes clientes esperando. Te notificaremos cuando alguien requiera tus servicios.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.5),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

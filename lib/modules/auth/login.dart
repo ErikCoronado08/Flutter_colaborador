@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart'; 
 import '../../widgets/loading_overlay.dart'; 
-import '../../services/auth_service.dart'; // <--- Importación del nuevo servicio
+import '../../services/auth_service.dart'; 
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -14,18 +12,14 @@ class Login extends StatefulWidget {
 
 class _LoginState extends State<Login> {
   bool _estaCargando = false;
-  
-  // 1. Controladores para leer lo que el usuario escribe
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // 2. Instancia de Google Sign In
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: '923305570744-pvm4f5u07ht0pne9egs0d78boqt21lp6.apps.googleusercontent.com',
     scopes: ['email', 'profile'],
   );
 
-  // 3. Instancia de tu nuevo AuthService (Solo para Google)
   final AuthService _authService = AuthService();
 
   @override
@@ -35,121 +29,89 @@ class _LoginState extends State<Login> {
     super.dispose();
   }
 
-  // --- LOGIN TRADICIONAL (Se mantiene directo en la vista) ---
   Future<void> _procesarLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, ingresa tu correo y contraseña'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('Por favor, ingresa tu correo y contraseña'), backgroundColor: Colors.red),
       );
       return;
     }
 
     setState(() => _estaCargando = true);
     
-    try {
-      final response = await http.post(
-        Uri.parse('http://192.168.0.38:8000/api/login'), 
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode({
-          'email': email,
-          'password': password,
-        }),
-      );
+    final resultado = await _authService.login(email, password);
+    
+    if (mounted) {
+      if (resultado['success']) {
+        final statusRes = await _authService.verificarStatus();
+        setState(() => _estaCargando = false);
 
-      final data = json.decode(response.body);
-
-      setState(() => _estaCargando = false);
-
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(data['message'] ?? 'Inicio de sesión exitoso'),
-              backgroundColor: Colors.green,
-            ),
-          );
+        if (statusRes['success']) {
+          bool documentosCompletos = statusRes['data']['documentos_completos'] ?? false;
+          
+          if (!documentosCompletos) {
+            Navigator.pushReplacementNamed(context, '/documents');
+          } else {
+            Navigator.pushReplacementNamed(context, '/'); 
+          }
+        } else {
           Navigator.pushReplacementNamed(context, '/'); 
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(data['message'] ?? 'Credenciales incorrectas'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      setState(() => _estaCargando = false);
-      if (mounted) {
+        setState(() => _estaCargando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error de conexión: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  // --- LOGIN CON GOOGLE (Conectado a tu AuthService) ---
   Future<void> _handleGoogleSignIn() async {
     setState(() => _estaCargando = true);
     
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
       if (googleUser == null) {
         setState(() => _estaCargando = false);
         return; 
       }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      // Usamos el servicio y le pasamos el token
       final resultado = await _authService.loginGoogle(googleAuth.idToken!);
 
-      if (resultado['success']) {
-        if (mounted) {
+      if (mounted) {
+        if (resultado['success']) {
+          final statusRes = await _authService.verificarStatus();
+          setState(() => _estaCargando = false);
+
+          if (statusRes['success']) {
+            bool documentosCompletos = statusRes['data']['documentos_completos'] ?? false;
+            
+            if (!documentosCompletos) {
+              Navigator.pushReplacementNamed(context, '/documents');
+            } else {
+              Navigator.pushReplacementNamed(context, '/'); 
+            }
+          } else {
+            Navigator.pushReplacementNamed(context, '/'); 
+          }
+        } else {
+          setState(() => _estaCargando = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(resultado['message']),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pushReplacementNamed(context, '/');
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(resultado['message']),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
           );
         }
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _estaCargando = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Error al procesar la cuenta de Google'), backgroundColor: Colors.red),
         );
       }
-    } finally {
-      if (mounted) setState(() => _estaCargando = false);
     }
   }
 
