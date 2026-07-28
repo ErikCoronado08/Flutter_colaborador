@@ -14,13 +14,14 @@ class AceptadoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String idServicio = (trabajo['_id'] ?? trabajo['id'] ?? '').toString();
+    // Obtenemos el ID del cliente para el chat web
+    final String clienteId = (trabajo['cliente_id'] ?? '').toString();
     final String nombreCliente = trabajo['cliente'] ?? trabajo['nombre'] ?? 'Cliente';
+    
     final String categoriaTitulo = trabajo['titulo'] ?? trabajo['categoria'] ?? 'General';
-    final String direccionServicio = trabajo['direccion'] ?? 'Dirección no especificada';
+    final String direccionServicio = trabajo['direccion'] ?? 'Dirección registrada por el cliente';
     final String precioServicio = trabajo['precio'] ?? '\$350.00 MXN';
 
-    // Fallback de color dinámico para evitar llamadas nulas
     Color colorCategoria;
     switch (categoriaTitulo.toLowerCase()) {
       case 'plomería': case 'plomeria': colorCategoria = Colors.blue; break;
@@ -65,11 +66,12 @@ class AceptadoScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
+                  // Enviamos al Chat real con el ID del cliente
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => ChatScreen(
-                        servicioId: idServicio,
+                        clienteId: clienteId,
                         nombreCliente: nombreCliente,
                       ),
                     ),

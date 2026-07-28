@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:intl/date_symbol_data_local.dart'; // <--- AGREGADO PARA EL IDIOMA DE LA AGENDA
+import 'package:intl/date_symbol_data_local.dart'; 
 
 // Importaciones de módulos
 import 'modules/main_screen.dart'; 
 import 'modules/finanzas/billetera_view.dart';
 import 'modules/finanzas/detalle_liquidacion_view.dart';
-import 'modules/finanzas/historial_transito_view.dart';
 import 'modules/finanzas/historial_servicios_view.dart';
 import 'modules/auth/login.dart';
 import 'modules/auth/register.dart';
@@ -15,12 +14,12 @@ import 'modules/usuario/messages_screen.dart';
 
 import 'modules/operaciones/service_detail_screen.dart';
 
-void main() async { // <--- CAMBIADO A ASYNC
+void main() async { 
   // Aseguramos la inicialización de los bindings de Flutter
   WidgetsFlutterBinding.ensureInitialized();
   
   // Inicializamos el formato de fechas para la agenda (es = español)
-  await initializeDateFormatting('es', null); // <--- AGREGADO
+  await initializeDateFormatting('es', null); 
 
   runApp(const JobHubApp());
 }
@@ -46,7 +45,7 @@ class JobHubApp extends StatelessWidget {
       // Ruta inicial
       initialRoute: '/login',
       
-      // Definición de rutas
+      // Definición de rutas limpias
       routes: {
         '/login': (context) => const Login(),
         '/register': (context) => const Register(),
@@ -54,18 +53,12 @@ class JobHubApp extends StatelessWidget {
         '/': (context) => const MainScreen(),
         '/billetera': (context) => const BilleteraView(),
         '/liquidacion': (context) => const DetalleLiquidacionView(),
-        '/historial_transito': (context) => const HistorialTransitoView(),
         '/historial': (context) => const HistorialServiciosView(),
         '/mensajes': (context) => const MessagesScreen(),
         
         '/agenda': (context) => const AgendaScreen(standalone: true),
-        '/detalle_servicio': (context) => const ServiceDetailScreen(
-              clientName: 'N/A', 
-              serviceType: 'N/A', 
-              time: 'N/A', 
-              distance: 'N/A', 
-              status: 'N/A',
-            ),
+        // CORRECCIÓN: Se actualizó el parámetro a agendaData
+        '/detalle_servicio': (context) => const ServiceDetailScreen(agendaData: {}),
       },
     );
   }

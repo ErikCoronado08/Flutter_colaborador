@@ -1,10 +1,9 @@
-import 'dart:typed_data'; 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart'; 
+import 'package:printing/printing.dart'; 
 import 'package:pdf/pdf.dart'; 
 import 'package:pdf/widgets.dart' as pw; 
-import 'package:printing/printing.dart'; 
-import 'package:share_plus/share_plus.dart'; 
-import 'package:intl/intl.dart';
 import '../../services/finanzas_service.dart';
 
 class DetalleLiquidacionView extends StatefulWidget {
@@ -15,40 +14,29 @@ class DetalleLiquidacionView extends StatefulWidget {
 }
 
 class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
-  int _tabActivo = 0;
   bool _isLoading = true;
   Map<String, dynamic>? _datos;
+  Map<String, dynamic>? _argsBusqueda;
   final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
   
-  String? _idServicio; // Variable para almacenar el ID que viene de la pantalla anterior
-
-  @override
-  void initState() {
-    super.initState();
-    // Quitamos la carga de datos de aquí porque necesitamos esperar al context
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // ATRAPAMOS EL ID ENVIADO DESDE EL HISTORIAL
-    if (_idServicio == null) {
+    if (_argsBusqueda == null) {
       final args = ModalRoute.of(context)?.settings.arguments;
-      if (args != null && args is String) {
-        _idServicio = args;
+      if (args != null && args is Map<String, dynamic>) {
+        _argsBusqueda = args;
         _cargarDetalle(); 
       } else {
-        // Manejo de error en caso de entrar a la pantalla sin argumentos
         setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _cargarDetalle() async {
-    if (_idServicio == null) return;
+    if (_argsBusqueda == null) return;
     try {
-      // USAMOS EL ID DINÁMICO PARA CONSULTAR A LARAVEL
-      final data = await FinanzasService().obtenerDetalle(_idServicio!); 
+      final data = await FinanzasService().obtenerDetalle(_argsBusqueda!); 
       setState(() {
         _datos = data;
         _isLoading = false;
@@ -58,213 +46,387 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
     }
   }
 
+  // --- MOTOR GENERADOR DEL PDF (DISEÑO TÉRMICO PROFESIONAL) ---
+  Future<pw.Document> _generarPDFTicket(String folio, String fecha, String estado, String subtotal, String impuestos, String total) async {
+    final pdf = pw.Document();
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80, // Formato de ticket de 80mm
+        margin: const pw.EdgeInsets.all(15),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Text('JOBHUB', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 2),
+              pw.Text('COMPROBANTE DE OPERACION', style: const pw.TextStyle(fontSize: 10)),
+              pw.SizedBox(height: 12),
+              pw.Divider(borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 8),
+              
+              // Datos generales
+              _buildPdfRow('Folio:', folio),
+              _buildPdfRow('Fecha:', fecha),
+              _buildPdfRow('Estado:', estado.toUpperCase()),
+              
+              pw.SizedBox(height: 8),
+              pw.Divider(borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 8),
+              
+              pw.Text('DETALLE DE IMPORTES', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+              
+              // Desgloses
+              _buildPdfRow('Subtotal:', '$subtotal MXN'),
+              _buildPdfRow('Retenciones:', '-$impuestos MXN'),
+              
+              pw.SizedBox(height: 8),
+              pw.Divider(borderStyle: pw.BorderStyle.solid),
+              pw.SizedBox(height: 8),
+              
+              // Total
+              _buildPdfRow('TOTAL NETO:', '$total MXN', isBold: true, size: 12),
+              
+              pw.SizedBox(height: 24),
+              pw.Text('Este documento es un comprobante digital.', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 8)),
+              pw.Text('jobhub.utptics.com', style: const pw.TextStyle(fontSize: 8)),
+            ],
+          );
+        },
+      ),
+    );
+    
+    return pdf;
+  }
+
+  // Fila auxiliar para el PDF
+  pw.Widget _buildPdfRow(String label, String value, {bool isBold = false, double size = 10}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(fontSize: size, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+          pw.Text(value, style: pw.TextStyle(fontSize: size, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+        ],
+      ),
+    );
+  }
+
+  // Lógica principal al dar click en "Ver Ticket"
+  void _verFacturaTXT() async {
+    if (_datos == null || _datos!['liquidacion'] == null) return;
+    
+    final folio = _datos!['factura']?['folio'] ?? _datos!['liquidacion']['folio_servicio'];
+    final subtotal = formatoMoneda.format(double.parse(_datos!['liquidacion']['desgloses']['monto_bruto'].toString()));
+    final impuestos = formatoMoneda.format(double.parse(_datos!['liquidacion']['desgloses']['impuestos'].toString()));
+    final total = formatoMoneda.format(double.parse(_datos!['liquidacion']['monto'].toString()));
+    final fecha = _datos!['factura']?['fecha'] ?? _datos!['liquidacion']['fecha'];
+    final estado = _datos!['liquidacion']['estado'];
+
+    // Texto embellecido para compartir por WhatsApp
+    final String textoParaCompartir = """
+🧾 *JOBHUB - COMPROBANTE* 🧾
+━━━━━━━━━━━━━━━━━━━━
+*Folio:* $folio
+*Fecha:* $fecha
+*Estado:* $estado
+
+*DETALLE DE IMPORTES*
+----------------------------------------
+Subtotal:          $subtotal MXN
+Retenciones:    -$impuestos MXN
+━━━━━━━━━━━━━━━━━━━━
+*TOTAL NETO:*  $total MXN
+━━━━━━━━━━━━━━━━━━━━
+""";
+
+    // Mostramos la previsualización visual del ticket
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          width: double.maxFinite,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, offset: const Offset(0, 10))
+            ]
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // --- CABECERA DEL TICKET ---
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: const Color(0xFFE26112).withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.receipt_long, color: Color(0xFFE26112), size: 36),
+              ),
+              const SizedBox(height: 16),
+              const Text('JOBHUB', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2, color: Colors.black87)),
+              const Text('COMPROBANTE DE OPERACIÓN', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              const SizedBox(height: 32),
+              
+              // --- DATOS DEL TICKET ---
+              _buildTicketRow('Folio', folio),
+              const SizedBox(height: 12),
+              _buildTicketRow('Fecha', fecha),
+              const SizedBox(height: 12),
+              _buildTicketRow('Estado', estado.toUpperCase(), valueColor: Colors.green),
+              
+              // --- LÍNEA PUNTEADA DIVISORIA ---
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  '- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -', 
+                  maxLines: 1, 
+                  overflow: TextOverflow.clip, 
+                  style: TextStyle(color: Colors.grey.shade400)
+                ),
+              ),
+              
+              // --- IMPORTES ---
+              _buildTicketRow('Subtotal', '$subtotal MXN'),
+              const SizedBox(height: 12),
+              _buildTicketRow('Retenciones', '-$impuestos MXN', valueColor: Colors.red),
+              
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Divider(thickness: 1, height: 1),
+              ),
+              
+              // --- TOTAL ---
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('TOTAL', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  Text('$total MXN', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFFE26112))),
+                ],
+              ),
+              const SizedBox(height: 40),
+              
+              // --- BOTONES DE ACCIÓN FLOTANTES ---
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Botón Compartir (Texto formateado para WhatsApp)
+                  Column(
+                    children: [
+                      InkWell(
+                        onTap: () => Share.share(textoParaCompartir, subject: 'Factura de Operación $folio'),
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+                          child: const Icon(Icons.share, color: Colors.black87, size: 24),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Compartir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black54))
+                    ],
+                  ),
+                  const SizedBox(width: 40),
+                  // Botón Imprimir (Genera el PDF real y lanza la impresora)
+                  Column(
+                    children: [
+                      InkWell(
+                        onTap: () async {
+                          final pdf = await _generarPDFTicket(folio, fecha, estado, subtotal, impuestos, total);
+                          await Printing.layoutPdf(
+                            onLayout: (PdfPageFormat format) async => pdf.save(),
+                            name: 'JobHub_Factura_$folio',
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: const BoxDecoration(color: Color(0xFFE26112), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))]),
+                          child: const Icon(Icons.print, color: Colors.white, size: 24),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Imprimir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFE26112)))
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              
+              // Cerrar
+              TextButton(
+                onPressed: () => Navigator.pop(context), 
+                child: const Text('Cerrar comprobante', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget auxiliar para las filas del Ticket visual
+  Widget _buildTicketRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500)),
+        Text(value, style: TextStyle(color: valueColor ?? Colors.black87, fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9FB),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Color(0xFF4D2214)), onPressed: () => Navigator.pop(context)),
-        title: const Text('Detalle de Liquidación', style: TextStyle(color: Color(0xFF4D2214), fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: false,
-        actions: [
-          IconButton(icon: const Icon(Icons.ios_share, color: Color(0xFF4D2214)), onPressed: () => _mostrarAccionFactura(context, 'compartir')),
-          IconButton(icon: const Icon(Icons.description_outlined, color: Color(0xFF4D2214)), onPressed: () => _mostrarAccionFactura(context, 'imprimir')),
-        ],
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.black87, size: 20), onPressed: () => Navigator.pop(context)),
+        title: const Text('Recibo de Operación', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
+        centerTitle: true,
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
-        : _datos == null 
+        : _datos == null || _datos!['liquidacion'] == null
             ? const Center(child: Text("Error al cargar los datos del servicio"))
             : SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
                 child: Column(
                   children: [
-                    const SizedBox(height: 10),
                     Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 6))]),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+                      child: Row(
                         children: [
-                          const SizedBox(height: 25),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _buildTopTag(0, 'Monto Bruto'),
-                              const SizedBox(width: 8),
-                              _buildTopTag(1, 'Comisión'),
-                            ],
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: Colors.grey.shade100,
+                            backgroundImage: NetworkImage(_datos!['cliente']['avatar'] ?? ''),
                           ),
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(24, 35, 24, 20),
-                            child: Text('Desglose financiero', style: TextStyle(color: Color(0xFF4D2214), fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(_datos!['cliente']['nombre'] ?? 'Cliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87)),
+                                const SizedBox(height: 4),
+                                Text(_datos!['servicio']['titulo'] ?? 'Servicio', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                              ],
+                            ),
                           ),
-                          _construirContenidoDinamico(),
-                          const SizedBox(height: 30),
-                          _buildGananciaNetaCard(),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
+
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))]),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Detalle de cobro', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text(_datos!['liquidacion']['fecha'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          _buildReceiptRow('Monto Bruto Cobrado', formatoMoneda.format(double.parse(_datos!['liquidacion']['desgloses']['monto_bruto'].toString())), Colors.black87),
+                          const SizedBox(height: 12),
+                          _buildReceiptRow('Comisión Plataforma (10%)', '- ${formatoMoneda.format(double.parse(_datos!['liquidacion']['desgloses']['comision'].toString()))}', Colors.red),
+                          const SizedBox(height: 12),
+                          _buildReceiptRow('Impuestos Retenidos (16%)', '- ${formatoMoneda.format(double.parse(_datos!['liquidacion']['desgloses']['impuestos'].toString()))}', Colors.red),
+                          
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Divider(thickness: 1, height: 1),
+                          ),
+                          
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Tu Ganancia Neta', style: TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text(formatoMoneda.format(double.parse(_datos!['liquidacion']['monto'].toString())), style: const TextStyle(color: Colors.green, fontSize: 24, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          const SizedBox(height: 30),
+
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(16)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildInfoRow('Folio Operativo', _datos!['liquidacion']['folio_servicio']),
+                                const SizedBox(height: 12),
+                                _buildInfoRow('Método de pago', _datos!['servicio']['metodo']),
+                                const SizedBox(height: 12),
+                                _buildInfoRow('Estado', _datos!['liquidacion']['estado']),
+                              ],
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // BOTÓN PARA ABRIR EL COMPROBANTE
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _verFacturaTXT,
+                              icon: const Icon(Icons.receipt, color: Color(0xFFE26112), size: 20),
+                              label: const Text('VER TICKET DE OPERACIÓN', style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                side: const BorderSide(color: Color(0xFFE26112)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                              ),
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
     );
   }
 
-  Widget _buildTopTag(int index, String text) {
-    bool isSelected = _tabActivo == index;
-    return GestureDetector(
-      onTap: () => setState(() => _tabActivo = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(color: isSelected ? const Color(0xFFE26112) : Colors.white, borderRadius: BorderRadius.circular(20), border: isSelected ? null : Border.all(color: Colors.grey.shade300)),
-        child: Text(text, style: TextStyle(color: isSelected ? Colors.white : const Color(0xFF4D2214), fontSize: 11, fontWeight: FontWeight.bold)),
-      ),
+  Widget _buildReceiptRow(String label, String value, Color valueColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500)),
+        Text(value, style: TextStyle(color: valueColor, fontSize: 15, fontWeight: FontWeight.w600)),
+      ],
     );
   }
 
-  Widget _construirContenidoDinamico() {
-    final bruto = formatoMoneda.format(double.parse(_datos!['monto_bruto'].toString()));
-    final comision = formatoMoneda.format(double.parse(_datos!['comision_app'].toString()));
-    final costoTrans = formatoMoneda.format(double.parse(_datos!['costo_transaccion'].toString()));
-
-    if (_tabActivo == 0) {
-      return Column(children: [
-        _buildFinanceItem(icon: Icons.attach_money, label: 'Monto Bruto', value: '+$bruto', color: const Color(0xFF2E7D32)),
-        const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.credit_card_outlined, label: 'Comisión App', value: comision, color: const Color(0xFFE26112)),
-      ]);
-    } else {
-      return Column(children: [
-        _buildFinanceItem(icon: Icons.pie_chart_outline, label: 'Tarifa de plataforma', value: comision, color: const Color(0xFFE26112)),
-        const Divider(height: 24, indent: 24, endIndent: 24),
-        _buildFinanceItem(icon: Icons.local_atm, label: 'Costo por transacción', value: costoTrans, color: const Color(0xFFE26112)),
-      ]);
-    }
-  }
-
-  Widget _buildFinanceItem({required IconData icon, required String label, required String value, required Color color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle), child: Icon(icon, color: Colors.grey.shade700, size: 20)),
-          const SizedBox(width: 14),
-          Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF4D2214), fontSize: 14, fontWeight: FontWeight.w600))),
-          Text(value, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGananciaNetaCard() {
-    final neta = formatoMoneda.format(double.parse(_datos!['ganancia_neta'].toString()));
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: const Color(0xFFE26112), borderRadius: BorderRadius.circular(24)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Ganancia Neta', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 4),
-                  Text(neta, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.card_giftcard, color: Colors.white, size: 24))
-            ],
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            value, 
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.bold),
           ),
-        ],
-      ),
-    );
-  }
-
-  Future<Uint8List> _generarPdfFactura() async {
-    final pdf = pw.Document();
-    final bruto = formatoMoneda.format(double.parse(_datos!['monto_bruto'].toString()));
-    final neta = formatoMoneda.format(double.parse(_datos!['ganancia_neta'].toString()));
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Header(level: 0, child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('JOBHUB - RECIBO DE LIQUIDACION', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.deepOrange800)), pw.Text('Folio #${_datos!['id_servicio']}')])),
-              pw.SizedBox(height: 20),
-              pw.TableHelper.fromTextArray(
-                context: context,
-                data: <List<String>>[
-                  ['Concepto', 'Monto'],
-                  ['Ingreso Bruto por Servicio', bruto],
-                  ['Comision App', _datos!['comision_app'].toString()],
-                  ['Costo Fijo Transaccion', _datos!['costo_transaccion'].toString()],
-                ],
-              ),
-              pw.SizedBox(height: 20),
-              pw.Divider(),
-              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('GANANCIA NETA:', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)), pw.Text(neta, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.green700))]),
-            ],
-          );
-        },
-      ),
-    );
-    return pdf.save();
-  }
-
-  void _mostrarAccionFactura(BuildContext context, String accion) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
-              const SizedBox(height: 24),
-              Icon(accion == 'compartir' ? Icons.ios_share : Icons.picture_as_pdf, size: 60, color: const Color(0xFFE26112)),
-              const SizedBox(height: 16),
-              Text(accion == 'compartir' ? 'Compartir Recibo' : 'Descargar Factura', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF4D2214))),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE26112), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Generando documento PDF...')));
-                    try {
-                      final Uint8List pdfBytes = await _generarPdfFactura();
-                      if (accion == 'compartir') {
-                        final xFile = XFile.fromData(pdfBytes, name: 'JobHub_Recibo_${_datos!['id_servicio']}.pdf', mimeType: 'application/pdf');
-                        await Share.shareXFiles([xFile], text: 'Aquí tienes el recibo de liquidación.');
-                      } else {
-                        await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdfBytes, name: 'JobHub_Factura_${_datos!['id_servicio']}');
-                      }
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-                    }
-                  },
-                  child: Text(accion == 'compartir' ? 'Compartir ahora' : 'Guardar / Imprimir PDF', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

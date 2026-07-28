@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../../widgets/custom_textfield.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_overlay.dart';
+import '../../services/auth_service.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -17,13 +16,14 @@ class _RegisterState extends State<Register> {
   String? selectedGender;
   DateTime? _birthDate;
 
-  // Controladores
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController(); // <- Nuevo
+  final TextEditingController _passwordController = TextEditingController(); 
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _experienceController = TextEditingController();
+
+  final AuthService _authService = AuthService();
 
   @override
   void dispose() {
@@ -66,7 +66,7 @@ class _RegisterState extends State<Register> {
     final nombre = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
-    final phone = _phoneController.text.trim();
+    final address = _addressController.text.trim();
 
     if (nombre.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,47 +75,75 @@ class _RegisterState extends State<Register> {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) { // El controlador web exige mínimo 8 caracteres
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres'), backgroundColor: Colors.red)
+        const SnackBar(content: Text('La contraseña debe tener al menos 8 caracteres'), backgroundColor: Colors.red)
+      );
+      return;
+    }
+
+    if (_birthDate == null || selectedGender == null || address.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, completa fecha de nacimiento, género y dirección'), backgroundColor: Colors.red)
       );
       return;
     }
 
     setState(() => _estaCargando = true);
 
-    try {
-      final response = await http.post(
-        Uri.parse('http://192.168.0.38:8000/api/register'), 
-        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: json.encode({
-          'name': nombre,
-          'email': email,
-          'password': password,
-          'gender': selectedGender
-        }),
-      );
+    // Mapeo EXACTO a lo que espera el AuthController web
+    final Map<String, dynamic> userData = {
+      'nombre_completo': nombre,
+      'email': email,
+      'password': password,
+      'telefono': _phoneController.text.trim(),
+      'birthdate': "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}",
+      'address': address,
+      'gender': selectedGender,
+      'experience': _experienceController.text.trim(),
+    };
 
-      final data = json.decode(response.body);
+    final resultado = await _authService.register(userData);
+    
+    if (mounted) {
       setState(() => _estaCargando = false);
-
-      if (response.statusCode == 201) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(data['message']), backgroundColor: Colors.green)
-          );
-          Navigator.pushNamed(context, '/documents'); 
-        }
+      
+      if (resultado['success']) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.mark_email_unread, color: Color(0xFFE26112), size: 28),
+                  SizedBox(width: 10),
+                  Text('Verifica tu correo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              content: const Text(
+                'Tu cuenta ha sido creada. Hemos enviado un enlace de verificación a tu correo electrónico. Por favor, verifícalo antes de iniciar sesión.',
+                style: TextStyle(color: Colors.black87, height: 1.4),
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE26112)),
+                  onPressed: () {
+                    Navigator.pop(context); 
+                    Navigator.pushReplacementNamed(context, '/login'); 
+                  },
+                  child: const Text('Entendido', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['message'] ?? 'Error al registrar'), backgroundColor: Colors.red)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
         );
       }
-    } catch (e) {
-      setState(() => _estaCargando = false);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error de conexión: $e'), backgroundColor: Colors.red)
-      );
     }
   }
 
@@ -181,11 +209,8 @@ class _RegisterState extends State<Register> {
                             const SizedBox(height: 16),
                             CustomTextField(hint: "Ingresa tu correo electrónico", icon: Icons.email_outlined, controller: _emailController),
                             const SizedBox(height: 16),
-                            
-                            // <- AQUÍ ESTÁ EL CAMPO DE CONTRASEÑA NUEVO
                             CustomTextField(hint: "Crea tu contraseña", icon: Icons.lock_outline, obscure: true, controller: _passwordController),
                             const SizedBox(height: 16),
-                            
                             CustomTextField(hint: "Ingresa tu número de teléfono", icon: Icons.phone, controller: _phoneController),
                             const SizedBox(height: 16),
                             InkWell(
@@ -239,7 +264,7 @@ class _RegisterState extends State<Register> {
                             const SizedBox(height: 28),
                             
                             CustomButton(
-                              text: "CONTINUAR A DOCUMENTACIÓN",
+                              text: "CONTINUAR",
                               onTap: _procesarRegistro, 
                             ),
                           ],

@@ -1,219 +1,233 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // IP centralizada de la API
-  static const String baseUrl = "http://192.168.0.130:8000/api"; 
+  static const String baseUrlWeb = "https://jobhub.utptics.com/api/colaborador"; 
+
+  static Future<Map<String, String>> _getHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+  }
 
   // ======================================
-  // MÉTODOS DE ROXANA (Operaciones y Chat)
+  // 1. SOLICITUDES Y OPERACIONES (Web)
   // ======================================
   static Future<List<dynamic>> obtenerSolicitudes() async {
     try {
-      final response = await http.get(Uri.parse("$baseUrl/operaciones/solicitudes"));
-      
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse("$baseUrlWeb/mi-agenda"), headers: headers);
       if (response.statusCode == 200) {
-        final Map<String, dynamic> respuestaSrv = jsonDecode(response.body);
-        if (respuestaSrv['ok'] == true && respuestaSrv['data'] != null) {
-          return respuestaSrv['data'] as List<dynamic>;
-        }
+        final data = jsonDecode(response.body);
+        if (data['solicitudes'] != null) return data['solicitudes'] as List<dynamic>;
       }
-      return [];
-    } catch (e) {
-      print("Error obteniendo solicitudes: $e");
-      return [];
+    } catch (e) { 
+      print("Error obteniendo solicitudes: $e"); 
     }
+    return [];
   }
 
-  static Future<bool> aceptarServicio(String servicioId) async {
+  static Future<bool> agendarSolicitud(Map<String, dynamic> payload) async {
     try {
+      final headers = await _getHeaders();
       final response = await http.post(
-        Uri.parse("$baseUrl/operaciones/aceptar-servicio"),
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
-        body: jsonEncode({"servicio_id": servicioId.trim()}),
+        Uri.parse("$baseUrlWeb/mi-agenda"),
+        headers: headers,
+        body: jsonEncode(payload),
       );
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      print("Error al conectar con la API aceptar-servicio: $e");
+      print("Error al agendar: $e");
       return false;
     }
   }
 
-  static Future<List<dynamic>> obtenerChat(String servicioId) async {
+  static Future<bool> rechazarSolicitud(String solicitudId) async {
     try {
-      final response = await http.get(Uri.parse("$baseUrl/chat/$servicioId"));
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse("$baseUrlWeb/mi-agenda/rechazar"),
+        headers: headers,
+        body: jsonEncode({"solicitud_id": solicitudId}),
+      );
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  static Future<bool> cambiarEstadoOperativo(String id, String estado) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.patch(
+        Uri.parse("$baseUrlWeb/operaciones/estado/$id"),
+        headers: headers,
+        body: jsonEncode({"estado": estado}),
+      );
+      return response.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
+  static Future<Map<String, dynamic>> subirEvidencia(String servicioId, File imagen) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrlWeb/operaciones/subir-evidencia'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      });
+      
+      request.fields['servicio_id'] = servicioId;
+      request.files.add(await http.MultipartFile.fromPath('evidencia', imagen.path));
+      
+      var response = await request.send();
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': 'Evidencia subida correctamente'};
+      }
+      return {'success': false, 'message': 'Error al procesar el cobro'};
+    } catch (e) {
+      return {'success': false, 'message': 'Error de conexión'};
+    }
+  }
+
+  // ======================================
+  // 2. CHAT / MENSAJES (Web)
+  // ======================================
+  static Future<List<dynamic>?> obtenerConversaciones() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrlWeb/conversaciones'), headers: headers);
+      if (response.statusCode == 200) return jsonDecode(response.body) as List<dynamic>;
+    } catch (e) {}
+    return null;
+  }
+
+  static Future<List<dynamic>> obtenerChat(String clienteId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse("$baseUrlWeb/mensajes/$clienteId"), headers: headers);
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as List<dynamic>;
       }
-      return [];
-    } catch (e) {
-      print("Error obteniendo el chat: $e");
-      return [];
-    }
+    } catch (e) {}
+    return [];
   }
 
-  static Future<bool> enviarMensaje(String servicioId, String mensaje) async {
+  static Future<bool> enviarMensaje(String clienteId, String mensaje) async {
     try {
+      final headers = await _getHeaders();
       final response = await http.post(
-        Uri.parse("$baseUrl/chat/$servicioId"),
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
-        body: jsonEncode({"remitente": "colaborador", "mensaje": mensaje, "contenido": mensaje}),
+        Uri.parse("$baseUrlWeb/mensajes"),
+        headers: headers,
+        body: jsonEncode({"cliente_id": clienteId, "contenido": mensaje}),
       );
       return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      print("Error crítico en la petición HTTP: $e");
-      return false;
-    }
-  }
-
-  static Future<void> actualizarUbicacion(String colabId, double lat, double lng) async {
-    try {
-      await http.patch(
-        Uri.parse("$baseUrl/operaciones/ubicacion"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"colaborador_id": colabId, "lat": lat, "lng": lng}),
-      );
-    } catch (e) {
-      print("Error al actualizar ubicación: $e");
-    }
-  }
-
-  static Future<bool> finalizarServicio(String servicioId) async {
-    try {
-      final response = await http.post(
-        Uri.parse("$baseUrl/operaciones/finalizar-servicio"),
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
-        body: jsonEncode({"servicio_id": servicioId.trim()}),
-      );
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      print("Error al conectar con la API finalizar-servicio: $e");
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   // ======================================
-  // MÉTODOS DE EDUAR (Usuario, Perfil y Agenda)
+  // 3. DASHBOARD Y PERFIL (Web)
   // ======================================
-  static Future<Map<String, dynamic>?> obtenerPerfil() async {
+  static Future<Map<String, dynamic>?> obtenerDashboard() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/usuario/perfil'));
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
-      }
-      print('Error obtenerPerfil status: ${response.statusCode} ${response.body}');
-    } catch (e) {
-      print('Error al obtener perfil: $e');
-    }
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrlWeb/mi-dashboard-colaborador'), headers: headers);
+      if (response.statusCode == 200) return jsonDecode(response.body);
+    } catch (e) {}
     return null;
   }
 
   static Future<Map<String, dynamic>?> obtenerPerfilUsuario() async {
-    return obtenerPerfil();
+    final dash = await obtenerDashboard();
+    return dash != null ? dash['perfil'] : null;
+  }
+
+  static Future<Map<String, dynamic>?> obtenerEstadisticas() async {
+    final dash = await obtenerDashboard();
+    return dash != null ? dash['estadisticas'] : null;
   }
 
   static Future<bool> actualizarFotoPerfil(File imagen) async {
     try {
-      final uri = Uri.parse('$baseUrl/usuario/foto');
-      final request = http.MultipartRequest('POST', uri);
-      request.files.add(await http.MultipartFile.fromPath('foto', imagen.path));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      if (response.statusCode == 200) {
-        return true;
-      }
-      print('Error actualizarFotoPerfil status: ${response.statusCode} ${response.body}');
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrlWeb/actualizar-perfil'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      });
+      
+      request.files.add(await http.MultipartFile.fromPath('foto_perfil', imagen.path));
+
+      var response = await request.send();
+      return response.statusCode == 200;
     } catch (e) {
       print('Error al actualizar foto: $e');
     }
     return false;
   }
 
-  static Future<bool> actualizarEspecialidades(List<String> especialidades) async {
+  // ======================================
+  // 4. AGENDA (Web)
+  // ======================================
+  static Future<Map<String, dynamic>?> obtenerAgendaCompleta() async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/usuario/especialidades'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'especialidades': especialidades}),
-      );
-      if (response.statusCode == 200) {
-        return true;
-      }
-      print('Error actualizarEspecialidades status: ${response.statusCode} ${response.body}');
-    } catch (e) {
-      print('Error al actualizar especialidades: $e');
-    }
-    return false;
-  }
-
-  static Future<bool> solicitarRetiro() async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/usuario/retiro'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'monto': 0}),
-      );
-      if (response.statusCode == 200) {
-        return true;
-      }
-      print('Error solicitarRetiro status: ${response.statusCode} ${response.body}');
-    } catch (e) {
-      print('Error al solicitar retiro: $e');
-    }
-    return false;
-  }
-
-  static Future<bool> logout() async {
-    try {
-      final response = await http.post(Uri.parse('$baseUrl/usuario/logout'));
-      if (response.statusCode == 200) {
-        return true;
-      }
-      print('Error logout status: ${response.statusCode} ${response.body}');
-    } catch (e) {
-      print('Error al cerrar sesión: $e');
-    }
-    return false;
-  }
-
-  static Future<Map<String, dynamic>?> obtenerEstadisticas() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/usuario/estadisticas'));
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
-      }
-      print('Error obtenerEstadisticas status: ${response.statusCode} ${response.body}');
-    } catch (e) {
-      print('Error al obtener estadísticas: $e');
-    }
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrlWeb/mi-agenda'), headers: headers);
+      if (response.statusCode == 200) return jsonDecode(response.body);
+    } catch (e) {}
     return null;
   }
 
-  static Future<List<dynamic>?> obtenerAgenda() async {
+  // ======================================
+  // 5. MIS SERVICIOS (Web)
+  // ======================================
+  static Future<List<dynamic>> obtenerMisServicios() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/usuario/agenda'));
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as List<dynamic>;
-      }
-      print('Error obtenerAgenda status: ${response.statusCode} ${response.body}');
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrlWeb/mis-servicios'), headers: headers);
+      if (response.statusCode == 200) return jsonDecode(response.body);
     } catch (e) {
-      print('Error al obtener agenda: $e');
+      print('Error al cargar mis servicios: $e');
     }
-    return null;
+    return [];
   }
 
-  static Future<List<dynamic>?> obtenerChats() async {
+  static Future<List<dynamic>> obtenerCatalogoServicios() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/usuario/notificaciones'));
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as List<dynamic>;
-      }
-      print('Error obtenerChats status: ${response.statusCode} ${response.body}');
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrlWeb/catalogo-servicios'), headers: headers);
+      if (response.statusCode == 200) return jsonDecode(response.body);
     } catch (e) {
-      print('Error al obtener chats: $e');
+      print('Error al cargar catálogo: $e');
     }
-    return null;
+    return [];
+  }
+
+  static Future<bool> crearServicio(Map<String, dynamic> data) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(Uri.parse('$baseUrlWeb/mis-servicios'), headers: headers, body: jsonEncode(data));
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> eliminarServicio(String id) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.delete(Uri.parse('$baseUrlWeb/mis-servicios/$id'), headers: headers);
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
   }
 }

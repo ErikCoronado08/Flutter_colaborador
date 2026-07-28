@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:desktop_drop/desktop_drop.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../services/auth_service.dart'; 
@@ -22,12 +21,6 @@ class _DocumentsState extends State<Documents> {
   final double _progreso = 0.5;
 
   File? _ineFile, _compFile, _fotoFile, _antFile;
-
-  @override
-  void initState() {
-    super.initState();
-    // Ya no se consulta estatus al servidor al iniciar para evitar errores de autenticación
-  }
 
   void _guardarArchivo(String key, File file) {
     setState(() {
@@ -101,26 +94,25 @@ class _DocumentsState extends State<Documents> {
 
     setState(() => _estaCargando = true);
     
-    try {
-      print("Subiendo archivos al servidor..."); 
-      await _authService.subirDocumentos(
-        ine: _ineFile!,
-        comprobante: _compFile!,
-        fotoPerfil: _fotoFile!,
-        antecedentes: _antFile!,
+    final resultado = await _authService.subirDocumentos(
+      ine: _ineFile!,
+      comprobante: _compFile!,
+      fotoPerfil: _fotoFile!,
+      antecedentes: _antFile!,
+    );
+
+    if (mounted) {
+      setState(() => _estaCargando = false);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(resultado['message']),
+          backgroundColor: resultado['success'] ? Colors.green : Colors.red,
+        ),
       );
 
-      if (mounted) {
-        setState(() => _estaCargando = false);
-        print("Envío terminado: Redirigiendo a Login.");
-        // Redirección directa e incondicional a la vista de Login
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _estaCargando = false);
-        print("Error en el envío, redirigiendo de igual forma: $e");
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      if (resultado['success']) {
+        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
       }
     }
   }
