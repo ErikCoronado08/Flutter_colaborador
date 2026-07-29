@@ -2,6 +2,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
 import '../operaciones/service_detail_screen.dart';
+// Importación corregida a la ruta de operaciones
+import '../operaciones/solicitudes_screen.dart'; 
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 
@@ -21,6 +23,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String saldoDisponible = '0.00';
   String gananciasHistoricas = '0.00';
   String estadoVerificacion = 'aprobado'; 
+  String? fotoPerfilUrl; 
+  int numeroSolicitudes = 0; 
+
   List<dynamic> proximosServicios = [];
   List<dynamic> transaccionesRecientes = [];
 
@@ -40,23 +45,25 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => cargando = true);
 
     final data = await ApiService.obtenerDashboard();
+    final solicitudes = await ApiService.obtenerSolicitudes(); 
 
     setState(() {
       if (data != null) {
         final perfil = data['perfil'];
         
-        // CORRECCIÓN: Leemos exactamente las llaves que envía Laravel
         if (perfil != null) {
           nombreUsuario = perfil['nombre_completo'] ?? 'Colaborador';
           estadoVerificacion = perfil['estado'] ?? 'pendiente';
           saldoDisponible = perfil['saldo_disponible']?.toString() ?? '0.00';
           gananciasHistoricas = perfil['ganancias_historicas']?.toString() ?? '0.00';
+          fotoPerfilUrl = perfil['foto_perfil_url']; 
         }
 
-        // CORRECCIÓN: Laravel envía 'servicios' y 'transacciones'
         proximosServicios = data['servicios'] ?? [];
         transaccionesRecientes = data['transacciones'] ?? [];
       }
+      
+      numeroSolicitudes = solicitudes.length; 
       cargando = false;
     });
   }
@@ -131,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (transaccionesRecientes.isEmpty)
           _buildEmptyState('No hay movimientos recientes.')
         else
-          ...transaccionesRecientes.take(3).map((t) => _buildTransactionCard(t)), // Mostramos solo las 3 más recientes
+          ...transaccionesRecientes.take(3).map((t) => _buildTransactionCard(t)), 
       ],
     );
   }
@@ -139,10 +146,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
-        const CircleAvatar(
+        CircleAvatar(
           radius: 28, 
-          backgroundColor: Colors.white,
-          child: Icon(Icons.person, color: AppColors.primary, size: 30)
+          backgroundColor: AppColors.primary.withOpacity(0.1),
+          backgroundImage: fotoPerfilUrl != null ? NetworkImage(fotoPerfilUrl!) : null,
+          child: fotoPerfilUrl == null 
+              ? const Icon(Icons.person, color: AppColors.primary, size: 30) 
+              : null,
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -154,10 +164,48 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-          child: const Icon(Icons.notifications_none, color: Colors.black87),
+        
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => SolicitudesScreen()), // <-- CONST QUITADO
+            ).then((_) => _cargarDatosBackend());
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white, 
+                  borderRadius: BorderRadius.circular(12), 
+                  border: Border.all(color: Colors.grey.shade200)
+                ),
+                child: const Icon(Icons.notifications_none, color: Colors.black87),
+              ),
+              if (numeroSolicitudes > 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$numeroSolicitudes',
+                      style: const TextStyle(
+                        color: Colors.white, 
+                        fontSize: 10, 
+                        fontWeight: FontWeight.bold
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         )
       ],
     );
@@ -281,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), shape: BoxShape.circle),
           child: const Icon(Icons.handyman, color: AppColors.primary),
         ),
-        title: Text('Servicio Agendado', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+        title: const Text('Servicio Agendado', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
         subtitle: Text('$fecha • $hora', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
