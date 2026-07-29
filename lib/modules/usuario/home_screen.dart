@@ -18,10 +18,11 @@ class _HomeScreenState extends State<HomeScreen> {
   late SharedPreferences _prefs;
 
   String nombreUsuario = 'Cargando...';
-  String gananciasHoy = '0';
-  String serviciosCompletados = '0';
+  String saldoDisponible = '0.00';
+  String gananciasHistoricas = '0.00';
   String estadoVerificacion = 'aprobado'; 
   List<dynamic> proximosServicios = [];
+  List<dynamic> transaccionesRecientes = [];
 
   @override
   void initState() {
@@ -43,19 +44,18 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       if (data != null) {
         final perfil = data['perfil'];
-        final estadisticas = data['estadisticas'];
-
-        // ¡AQUÍ ESTÁ LA CORRECCIÓN CLAVE! Leemos 'nombre_completo'
-        nombreUsuario = perfil != null ? (perfil['nombre_completo'] ?? 'Colaborador') : 'Colaborador';
         
-        estadoVerificacion = perfil != null ? (perfil['estado'] ?? 'pendiente') : 'pendiente';
-        
-        if (estadisticas != null) {
-          gananciasHoy = estadisticas['ingresos_mes']?.toString() ?? '0';
-          serviciosCompletados = estadisticas['servicios_completados']?.toString() ?? '0';
+        // CORRECCIÓN: Leemos exactamente las llaves que envía Laravel
+        if (perfil != null) {
+          nombreUsuario = perfil['nombre_completo'] ?? 'Colaborador';
+          estadoVerificacion = perfil['estado'] ?? 'pendiente';
+          saldoDisponible = perfil['saldo_disponible']?.toString() ?? '0.00';
+          gananciasHistoricas = perfil['ganancias_historicas']?.toString() ?? '0.00';
         }
 
-        proximosServicios = data['servicios_activos'] ?? [];
+        // CORRECCIÓN: Laravel envía 'servicios' y 'transacciones'
+        proximosServicios = data['servicios'] ?? [];
+        transaccionesRecientes = data['transacciones'] ?? [];
       }
       cargando = false;
     });
@@ -112,14 +112,26 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         _buildHeader(context),
         const SizedBox(height: 24),
-        _buildEarningsCard(),
-        const SizedBox(height: 32),
-        const Text('Servicios en Curso', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        _buildBalanceCard(),
         const SizedBox(height: 16),
+        _buildStatsRow(),
+        const SizedBox(height: 32),
+        
+        _buildSectionTitle('Servicios en Curso', Icons.work_outline),
+        const SizedBox(height: 12),
         if (proximosServicios.isEmpty)
-          const Center(child: Text('No tienes servicios pendientes'))
+          _buildEmptyState('No tienes servicios agendados por el momento.')
         else
           ...proximosServicios.map((s) => _buildServiceCard(s, context)),
+          
+        const SizedBox(height: 32),
+        
+        _buildSectionTitle('Transacciones Recientes', Icons.receipt_long_outlined),
+        const SizedBox(height: 12),
+        if (transaccionesRecientes.isEmpty)
+          _buildEmptyState('No hay movimientos recientes.')
+        else
+          ...transaccionesRecientes.take(3).map((t) => _buildTransactionCard(t)), // Mostramos solo las 3 más recientes
       ],
     );
   }
@@ -127,49 +139,185 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
-        const CircleAvatar(radius: 28, backgroundColor: AppColors.primary, child: Icon(Icons.person, color: Colors.white)),
+        const CircleAvatar(
+          radius: 28, 
+          backgroundColor: Colors.white,
+          child: Icon(Icons.person, color: AppColors.primary, size: 30)
+        ),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Bienvenido', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-              Text('¡Hola, $nombreUsuario!', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text('Bienvenido de vuelta,', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
+              Text(nombreUsuario, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
             ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+          child: const Icon(Icons.notifications_none, color: Colors.black87),
+        )
+      ],
+    );
+  }
+
+  Widget _buildBalanceCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.primary, 
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
+        ]
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.account_balance_wallet, color: Colors.white70, size: 20),
+              SizedBox(width: 8),
+              Text('Saldo Disponible', style: TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w500)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('\$$saldoDisponible MXN', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1)),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 16),
+                SizedBox(width: 8),
+                Text('Listo para retirar', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.trending_up, color: Colors.green),
+                const SizedBox(height: 12),
+                const Text('Histórico', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                Text('\$$gananciasHistoricas', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.star, color: Colors.amber),
+                SizedBox(height: 12),
+                Text('Calificación', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                Text('Ver Perfil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildEarningsCard() {
+  Widget _buildSectionTitle(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.black87, size: 22),
+        const SizedBox(width: 8),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
     return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(24)),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200, style: BorderStyle.solid)),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Ganancias del Mes', style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 8),
-          Text('\$$gananciasHoy MXN', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          Text('Total completados: $serviciosCompletados', style: const TextStyle(color: Colors.white70)),
+          Icon(Icons.inbox_outlined, size: 40, color: Colors.grey.shade300),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
         ],
       ),
     );
   }
 
   Widget _buildServiceCard(dynamic service, BuildContext context) {
-    final cliente = service['cliente_nombre'] ?? 'Cliente';
-    final servicio = service['servicio_nombre'] ?? 'Servicio';
-    final estado = service['estado_operativo'] ?? 'Pendiente';
+    final estatus = service['estatus'] ?? 'Pendiente';
+    final fecha = service['fecha'] ?? 'Sin fecha';
+    final hora = service['hora_inicio'] ?? '';
 
-    return Card(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
       child: ListTile(
-        leading: const Icon(Icons.work, color: AppColors.primary),
-        title: Text(cliente, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(servicio),
-        trailing: Text(estado, style: const TextStyle(color: AppColors.primary)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), shape: BoxShape.circle),
+          child: const Icon(Icons.handyman, color: AppColors.primary),
+        ),
+        title: Text('Servicio Agendado', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+        subtitle: Text('$fecha • $hora', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(20)),
+          child: Text(estatus.toString().toUpperCase(), style: TextStyle(color: Colors.blue.shade700, fontSize: 10, fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionCard(dynamic trx) {
+    final monto = trx['monto']?.toString() ?? '0.00';
+    final tipo = trx['tipo'] ?? 'Desconocido';
+    final estado = trx['estado'] ?? 'pendiente';
+    
+    bool isIngreso = tipo.toString().toLowerCase() != 'retiro';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isIngreso ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1), 
+            shape: BoxShape.circle
+          ),
+          child: Icon(isIngreso ? Icons.arrow_downward : Icons.arrow_upward, color: isIngreso ? Colors.green : Colors.orange, size: 20),
+        ),
+        title: Text(tipo.toString().toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
+        subtitle: Text(estado, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        trailing: Text(
+          '${isIngreso ? '+' : '-'}\$$monto', 
+          style: TextStyle(color: isIngreso ? Colors.green : Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)
+        ),
       ),
     );
   }
