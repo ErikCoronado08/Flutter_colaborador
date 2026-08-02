@@ -1,11 +1,12 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async'; // <-- IMPORTANTE PARA EL TIMER
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
 import '../operaciones/service_detail_screen.dart';
-// Importación corregida a la ruta de operaciones
 import '../operaciones/solicitudes_screen.dart'; 
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart'; // <-- IMPORTANTE PARA LANZAR ALERTA
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,6 +27,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String? fotoPerfilUrl; 
   int numeroSolicitudes = 0; 
 
+  // NUEVAS VARIABLES PARA EL POLLING SILENCIOSO
+  Timer? _timerSolicitudes;
+  int _ultimoConteo = 0;
+
   List<dynamic> proximosServicios = [];
   List<dynamic> transaccionesRecientes = [];
 
@@ -34,6 +39,37 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initializePreferences();
     _cargarDatosBackend();
+    _iniciarEscuchaDeSolicitudes(); // <-- INICIA EL ESCUCHADOR
+  }
+
+  // LÓGICA DE ESCUCHA SILENCIOSA A LA API DE LARAVEL
+  void _iniciarEscuchaDeSolicitudes() {
+    _timerSolicitudes = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      final solicitudes = await ApiService.obtenerSolicitudes(); 
+      
+      // Si el servidor nos devuelve más solicitudes de las que teníamos registradas:
+      if (solicitudes.length > _ultimoConteo) {
+        NotificationService().mostrarNotificacion(
+          id: 1,
+          title: '¡Nueva solicitud de servicio!',
+          body: 'Un cliente requiere tus servicios. Toca para revisar.',
+          payload: 'nueva_solicitud',
+        );
+      }
+      
+      if (mounted) {
+        setState(() {
+          numeroSolicitudes = solicitudes.length;
+          _ultimoConteo = solicitudes.length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timerSolicitudes?.cancel(); // <-- APAGAR EL ESCUCHADOR AL SALIR
+    super.dispose();
   }
 
   Future<void> _initializePreferences() async {
@@ -64,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       
       numeroSolicitudes = solicitudes.length; 
+      _ultimoConteo = solicitudes.length; // Sincroniza el conteo local al recargar manual
       cargando = false;
     });
   }
@@ -169,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => SolicitudesScreen()), // <-- CONST QUITADO
+              MaterialPageRoute(builder: (context) => const SolicitudesScreen()),
             ).then((_) => _cargarDatosBackend());
           },
           child: Stack(

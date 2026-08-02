@@ -211,15 +211,23 @@ class _BilleteraViewState extends State<BilleteraView> {
                           ...transaccionesRecientes.take(5).map((trx) => _buildTransaccionItem(trx)).toList(),
                         
                         const SizedBox(height: 20),
-                        Center(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pushNamed(context, '/historial'), 
+                        
+                        // NUEVO DISEÑO ESTÉTICO DEL BOTÓN (Full width, Icono y Fondo suave)
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.pushNamed(context, '/historial'),
+                            icon: const Icon(Icons.history, color: Color(0xFFE26112), size: 20),
+                            label: const Text(
+                              'VER HISTORIAL COMPLETO', 
+                              style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold, letterSpacing: 0.5, fontSize: 15)
+                            ),
                             style: OutlinedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE26112).withOpacity(0.06), // Tinte naranja sutil de fondo
                               side: const BorderSide(color: Color(0xFFE26112), width: 1.5), 
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
-                              padding: const EdgeInsets.symmetric(vertical: 14)
-                            ), 
-                            child: const Text('VER HISTORIAL DE SERVICIOS', style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold, letterSpacing: 0.5))
+                              padding: const EdgeInsets.symmetric(vertical: 16) // Más alto para verse premium
+                            ),
                           )
                         ),
                         const SizedBox(height: 40),
@@ -237,7 +245,6 @@ class _BilleteraViewState extends State<BilleteraView> {
     final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
     
     return InkWell(
-      // Ahora la transacción es CLICKABLE y envía su ID hacia la pantalla del recibo
       onTap: () => Navigator.pushNamed(context, '/liquidacion', arguments: {'id': trx['id'].toString()}),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),

@@ -50,5 +50,5 @@ flutter {
 // Dependencias adicionales del módulo de aplicación
 dependencies {
     // Librería traductora para desugaring de APIs de JDK modernas
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
