@@ -12,6 +12,8 @@ class Login extends StatefulWidget {
 
 class _LoginState extends State<Login> {
   bool _estaCargando = false;
+  bool _ocultarPassword = true; // <-- NUEVA VARIABLE DE ESTADO
+  
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -168,14 +170,25 @@ class _LoginState extends State<Login> {
                     const SizedBox(height: 10),
                     TextField(
                       controller: _passwordController,
-                      obscureText: true,
+                      obscureText: _ocultarPassword, // <-- SE VINCULA A LA VARIABLE
                       cursorColor: const Color(0xFFE26112),
                       style: const TextStyle(color: Colors.black),
                       decoration: InputDecoration(
                         hintText: "Ingresa tu contraseña",
                         hintStyle: const TextStyle(color: Color(0xFFB4B4B4)),
                         prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF999999)),
-                        suffixIcon: const Icon(Icons.visibility_outlined, color: Color(0xFF999999)),
+                        // <-- SE CAMBIA EL ICONO POR UN ICONBUTTON CON ACCIÓN
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _ocultarPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                            color: const Color(0xFF999999),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _ocultarPassword = !_ocultarPassword; // Alterna el valor
+                            });
+                          },
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFDADADA))),

@@ -11,15 +11,22 @@ import 'modules/auth/register.dart';
 import 'modules/auth/documents.dart';
 import 'modules/usuario/agenda_screen.dart';
 import 'modules/usuario/messages_screen.dart';
-
 import 'modules/operaciones/service_detail_screen.dart';
+import 'modules/operaciones/solicitudes_screen.dart'; // <-- NUEVA RUTA PARA NOTIFICACIONES
+
+// Importación del servicio de notificaciones
+import 'services/notification_service.dart';
+
+// 1. LLAVE GLOBAL DE NAVEGACIÓN (Fuera de las clases)
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async { 
-  // Aseguramos la inicialización de los bindings de Flutter
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Inicializamos el formato de fechas para la agenda (es = español)
   await initializeDateFormatting('es', null); 
+
+  // 2. INICIALIZAR EL SERVICIO DE NOTIFICACIONES
+  await NotificationService().init(navigatorKey);
 
   runApp(const JobHubApp());
 }
@@ -30,6 +37,8 @@ class JobHubApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      // 3. ASIGNAR LA LLAVE AL MATERIAL APP
+      navigatorKey: navigatorKey,
       title: 'JobHub Colaborador',
       debugShowCheckedModeBanner: false,
       
@@ -42,10 +51,8 @@ class JobHubApp extends StatelessWidget {
         ),
       ),
       
-      // Ruta inicial
       initialRoute: '/login',
       
-      // Definición de rutas limpias
       routes: {
         '/login': (context) => const Login(),
         '/register': (context) => const Register(),
@@ -55,10 +62,9 @@ class JobHubApp extends StatelessWidget {
         '/liquidacion': (context) => const DetalleLiquidacionView(),
         '/historial': (context) => const HistorialServiciosView(),
         '/mensajes': (context) => const MessagesScreen(),
-        
         '/agenda': (context) => const AgendaScreen(standalone: true),
-        // CORRECCIÓN: Se actualizó el parámetro a agendaData
         '/detalle_servicio': (context) => const ServiceDetailScreen(agendaData: {}),
+        '/solicitudes': (context) => const SolicitudesScreen(), // <-- AÑADIDA PARA QUE NAVEGUE AL TOCAR LA NOTIFICACIÓN
       },
     );
   }
