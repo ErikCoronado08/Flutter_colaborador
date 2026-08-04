@@ -1,13 +1,12 @@
-import 'dart:convert'; // <--- FALTABA ESTE
+import 'dart:convert'; 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http; // <--- FALTABA ESTE
-import 'package:shared_preferences/shared_preferences.dart'; // <--- FALTABA ESTE
+import 'package:http/http.dart' as http; 
+import 'package:shared_preferences/shared_preferences.dart'; 
 import '../../theme/app_colors.dart';
 import '../../services/api_service.dart'; 
-import '../../services/finanzas_service.dart'; 
 import '../../services/auth_service.dart'; 
 
 class ProfileScreen extends StatefulWidget {
@@ -23,6 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
   
   Map<String, dynamic>? _userData;
+  List<dynamic> _documentos = [];
   bool _isLoading = true;
   File? _profileImage;
 
@@ -32,13 +32,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fetchUserProfile();
   }
 
+  // OBTENEMOS EL PERFIL Y LOS DOCUMENTOS AL MISMO TIEMPO
   Future<void> _fetchUserProfile() async {
     setState(() => _isLoading = true);
-    final perfil = await ApiService.obtenerPerfilUsuario(); 
+    final dashboardData = await ApiService.obtenerDashboard(); 
     
     setState(() {
-      if (perfil != null) {
-        _userData = perfil;
+      if (dashboardData != null) {
+        _userData = dashboardData['perfil'];
+        _documentos = dashboardData['documentos'] ?? [];
       }
       _isLoading = false;
     });
@@ -58,10 +60,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final exito = await ApiService.actualizarFotoPerfil(_profileImage!);
       if (exito && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto de perfil actualizada correctamente.'), backgroundColor: AppColors.success)
+          const SnackBar(content: Text('Foto de perfil actualizada correctamente.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green)
         );
         _fetchUserProfile(); 
       }
+    }
+  }
+
+  // LÓGICA PARA SUBIR DOCUMENTOS (INE, Domicilio, Antecedentes, Foto)
+  Future<void> _subirDocumento(String tipo) async {
+    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (pickedFile == null) return;
+
+    setState(() => _isLoading = true);
+    
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    var request = http.MultipartRequest('POST', Uri.parse('https://jobhub.utptics.com/api/colaborador/perfil/documentos'));
+    request.headers.addAll({
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $token',
+    });
+    
+    request.fields['tipo'] = tipo;
+    request.files.add(await http.MultipartFile.fromPath('documento', pickedFile.path));
+    
+    var response = await request.send();
+    
+    if (mounted) {
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Documento subido correctamente.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al procesar el documento.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+      }
+      _fetchUserProfile();
+    }
+  }
+
+  // LÓGICA PARA ELIMINAR DOCUMENTO
+  Future<void> _eliminarDocumento(int id) async {
+    setState(() => _isLoading = true);
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    
+    final response = await http.delete(
+      Uri.parse('https://jobhub.utptics.com/api/colaborador/perfil/documentos/$id'),
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'}
+    );
+
+    if (mounted) {
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Documento eliminado.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al eliminar.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+      }
+      _fetchUserProfile();
     }
   }
 
@@ -90,20 +144,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 const Text('Editar Información', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                 const SizedBox(height: 20),
-                TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre Completo', border: OutlineInputBorder())),
+                TextField(controller: nombreCtrl, decoration: InputDecoration(labelText: 'Nombre Completo', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
                 const SizedBox(height: 16),
-                TextField(controller: telefonoCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teléfono', border: OutlineInputBorder())),
+                TextField(controller: telefonoCtrl, keyboardType: TextInputType.phone, decoration: InputDecoration(labelText: 'Teléfono', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
                 const SizedBox(height: 16),
-                TextField(controller: ocupacionCtrl, decoration: const InputDecoration(labelText: 'Ocupación', border: OutlineInputBorder())),
+                TextField(controller: ocupacionCtrl, decoration: InputDecoration(labelText: 'Ocupación', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
                 const SizedBox(height: 16),
-                TextField(controller: sobreMiCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Sobre mí', border: OutlineInputBorder())),
+                TextField(controller: sobreMiCtrl, maxLines: 3, decoration: InputDecoration(labelText: 'Sobre mí', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 16)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE26112), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                     onPressed: () async {
                       Navigator.pop(context);
+                      setState(() => _isLoading = true);
                       
                       final prefs = await SharedPreferences.getInstance();
                       final token = prefs.getString('token') ?? '';
@@ -124,10 +179,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
 
                       if (response.statusCode == 200 && mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil actualizado con éxito'), backgroundColor: Colors.green));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil actualizado con éxito', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
                         _fetchUserProfile();
                       } else if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al actualizar perfil'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al actualizar perfil', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+                        setState(() => _isLoading = false);
                       }
                     },
                     child: const Text('GUARDAR CAMBIOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -156,13 +212,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppColors.background,
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE26112))),
       );
     }
 
     final content = RefreshIndicator(
       onRefresh: _fetchUserProfile,
-      color: AppColors.primary,
+      color: const Color(0xFFE26112),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -176,30 +232,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _mostrarModalEditarPerfil,
-                icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
-                label: const Text('Editar información personal', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                icon: const Icon(Icons.edit_outlined, color: Color(0xFFE26112)),
+                label: const Text('Editar información personal', style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold)),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.primary),
+                  side: const BorderSide(color: Color(0xFFE26112)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            _buildSectionTitle('Billetera y Finanzas'),
-            _buildFinancialSummary(),
+            // SECCIÓN DE DOCUMENTOS
+            _buildSectionTitle('Expediente de Seguridad'),
             const SizedBox(height: 12),
-            _buildSettingsGroup([
-              _buildListTile(Icons.payments_outlined, 'Solicitar retiro', 'Disponible: \$${_userData?['saldo_disponible'] ?? '0.00'} MXN', trailingIcon: Icons.arrow_forward_ios, onTap: () => _showWithdrawalConfirmation(context)),
-            ]),
-            const SizedBox(height: 24),
+            _buildDocumentosLista(),
+            const SizedBox(height: 32),
 
-            _buildSectionTitle('Cuenta y Seguridad'),
+            _buildSectionTitle('Soporte'),
             _buildSettingsGroup([
-              _buildListTile(Icons.article_outlined, 'Documentos de identidad', _userData?['estado'] == 'aprobado' ? 'Verificado' : 'Pendiente', trailingColor: _userData?['estado'] == 'aprobado' ? AppColors.success : Colors.amber, trailingIcon: _userData?['estado'] == 'aprobado' ? Icons.check_circle : Icons.warning, onTap: () {}),
-              _buildDivider(),
-              _buildListTile(Icons.support_agent, 'Soporte Técnico', 'Enviar correo', trailingIcon: Icons.arrow_forward_ios, onTap: _launchSupport),
+              _buildListTile(Icons.support_agent, 'Atención al Cliente', 'Enviar correo a soporte', trailingIcon: Icons.arrow_forward_ios, onTap: _launchSupport),
             ]),
             const SizedBox(height: 40),
 
@@ -242,6 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final String nombreCompleto = _userData?['nombre_completo'] ?? 'Colaborador';
     final String email = _userData?['email'] ?? '';
     final String ocupacion = _userData?['ocupacion'] ?? '';
+    final String calificacion = _userData?['calificacion']?.toString() ?? '5.0';
 
     return Center(
       child: Column(
@@ -253,18 +306,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: _pickProfileImage,
                 child: CircleAvatar(
                   radius: 46,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundColor: const Color(0xFFE26112).withOpacity(0.1),
                   backgroundImage: _profileImage != null 
                       ? FileImage(_profileImage!) 
                       : (avatarUrl != null ? NetworkImage(avatarUrl) as ImageProvider : null),
                   child: (_profileImage == null && avatarUrl == null)
-                      ? const Icon(Icons.person, size: 48, color: AppColors.primary)
+                      ? const Icon(Icons.person, size: 48, color: Color(0xFFE26112))
                       : null,
                 ),
               ),
               Container(
                 padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 2))),
                 child: const Icon(Icons.camera_alt, color: Colors.white, size: 12),
               )
             ],
@@ -272,11 +325,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 16),
           Text(nombreCompleto, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           const SizedBox(height: 4),
-          if (ocupacion.isNotEmpty) ...[
-            Text(ocupacion, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.primary)),
-            const SizedBox(height: 2),
-          ],
-          Text(email, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (ocupacion.isNotEmpty) ...[
+                Text(ocupacion, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFFE26112))),
+                const SizedBox(width: 8),
+                const Text('•', style: TextStyle(color: Colors.grey)),
+                const SizedBox(width: 8),
+              ],
+              const Icon(Icons.star, color: Colors.amber, size: 16),
+              const SizedBox(width: 4),
+              Text(calificacion, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(email, style: const TextStyle(fontSize: 13, color: Colors.grey)),
         ],
       ),
     );
@@ -284,35 +348,115 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 12),
-      child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+      padding: const EdgeInsets.only(left: 4, bottom: 4),
+      child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
     );
   }
 
-  Widget _buildFinancialSummary() {
-    final balanceText = '\$${_userData?['saldo_disponible'] ?? '0.00'} MXN';
+  // WIDGET PARA DIBUJAR LOS DOCUMENTOS CON ESTADOS EN TIEMPO REAL
+  Widget _buildDocumentosLista() {
+    // 💡 AQUÍ AGREGAMOS LA FOTO AL ARREGLO
+    const tipos = [
+      {'tipo': 'foto', 'label': 'Fotografía de Rostro'},
+      {'tipo': 'ine', 'label': 'Identificación Oficial (INE)'}, 
+      {'tipo': 'domicilio', 'label': 'Comprobante de Domicilio'}, 
+      {'tipo': 'antecedentes', 'label': 'Antecedentes no Penales'}
+    ];
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.brown,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: AppColors.brown.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Balance disponible', style: TextStyle(color: Colors.white70, fontSize: 13)),
-          const SizedBox(height: 8),
-          Text(balanceText, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-        ],
-      ),
+    return Column(
+      children: tipos.map((docData) {
+        final String tipo = docData['tipo']!;
+        final String label = docData['label']!;
+        
+        // Buscamos si el documento existe en la API
+        final docExistente = _documentos.firstWhere((d) => d['tipo'] == tipo, orElse: () => null);
+
+        String estadoStr = 'NO SUBIDO';
+        Color colorEstado = Colors.grey;
+        IconData iconoEstado = Icons.error_outline;
+
+        if (docExistente != null) {
+          final rawEstado = (docExistente['estado'] ?? '').toString().toLowerCase();
+          if (rawEstado == 'aprobado' || rawEstado == 'aceptado') {
+            estadoStr = 'VERIFICADO';
+            colorEstado = Colors.green;
+            iconoEstado = Icons.check_circle;
+          } else if (rawEstado == 'pendiente' || rawEstado == 'revision') {
+            estadoStr = 'EN REVISIÓN';
+            colorEstado = Colors.amber.shade700;
+            iconoEstado = Icons.hourglass_top;
+          } else if (rawEstado == 'rechazado') {
+            estadoStr = 'RECHAZADO';
+            colorEstado = Colors.red;
+            iconoEstado = Icons.cancel;
+          }
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: colorEstado.withOpacity(0.3), width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4))],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: colorEstado.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(iconoEstado, color: colorEstado, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(estadoStr, style: TextStyle(color: colorEstado, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  ],
+                ),
+              ),
+              if (docExistente != null) ...[
+                // Botón Reemplazar
+                IconButton(
+                  icon: const Icon(Icons.cloud_upload_outlined, color: Color(0xFFE26112)),
+                  tooltip: 'Reemplazar documento',
+                  onPressed: () => _subirDocumento(tipo),
+                ),
+                // Botón Eliminar
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  tooltip: 'Eliminar',
+                  onPressed: () => _eliminarDocumento(docExistente['id']),
+                ),
+              ] else ...[
+                // Botón Subir Primera Vez
+                ElevatedButton(
+                  onPressed: () => _subirDocumento(tipo),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE26112), 
+                    elevation: 0, 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0)
+                  ),
+                  child: const Text('Subir', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                )
+              ]
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
   Widget _buildSettingsGroup(List<Widget> children) {
-    return Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)), child: Column(children: children));
+    return Container(
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)), 
+      child: Column(children: children)
+    );
   }
 
   Widget _buildListTile(IconData icon, String title, String subtitle, {IconData trailingIcon = Icons.arrow_forward_ios, Color? trailingColor, VoidCallback? onTap}) {
@@ -323,7 +467,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 20, color: AppColors.primary)),
+            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFFE26112).withOpacity(0.08), borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 20, color: const Color(0xFFE26112))),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -339,40 +483,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Padding(padding: const EdgeInsets.only(left: 56, right: 16), child: Divider(height: 1, color: Colors.grey.shade100));
-  }
-
-  void _showWithdrawalConfirmation(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Solicitar retiro', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('¿Deseas solicitar un retiro de tu saldo disponible?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                double saldo = double.tryParse(_userData?['saldo_disponible']?.toString() ?? '0') ?? 0.0;
-                final exito = await FinanzasService().solicitarRetiro(saldo);
-                
-                if (exito && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Retiro procesado con éxito.'), backgroundColor: AppColors.success));
-                  _fetchUserProfile();
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text('Confirmar Retiro', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
     );
   }
 

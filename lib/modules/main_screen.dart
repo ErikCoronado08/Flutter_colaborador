@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'finanzas/billetera_view.dart';
 import 'usuario/home_screen.dart';
-import 'usuario/mis_servicios_screen.dart'; // <--- NUEVA PESTAÑA EN LA BARRA INFERIOR
+import 'usuario/mis_servicios_screen.dart'; 
 import 'usuario/agenda_screen.dart';
 import 'usuario/profile_screen.dart';
+import 'usuario/messages_screen.dart'; // <--- ¡AQUÍ ESTÁ LA CORRECCIÓN!
 import '../theme/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
@@ -16,13 +17,14 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // Lista de pantallas con Mis Servicios en el menú inferior
+  // Lista de pantallas con el Chat incluido
   final List<Widget> _screens = [
     const HomeScreen(),                    // 0: Inicio
-    const MisServiciosScreen(),            // 1: Mis Servicios (Reemplaza a Solicitudes)
+    const MisServiciosScreen(),            // 1: Mis Servicios
     const AgendaScreen(standalone: false), // 2: Agenda
-    const BilleteraView(),                 // 3: Wallet
-    const ProfileScreen(embed: true),      // 4: Perfil
+    const MessagesScreen(standalone: false),// 3: Mensajes / Chat
+    const BilleteraView(),                 // 4: Wallet
+    const ProfileScreen(embed: true),      // 5: Perfil
   ];
 
   @override
@@ -49,12 +51,12 @@ class _MainScreenState extends State<MainScreen> {
               _currentIndex = index;
             });
           },
-          type: BottomNavigationBarType.fixed,
+          type: BottomNavigationBarType.fixed, 
           backgroundColor: Colors.white,
           selectedItemColor: AppColors.primary,
           unselectedItemColor: Colors.grey,
-          selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-          unselectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+          selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -70,6 +72,11 @@ class _MainScreenState extends State<MainScreen> {
               icon: Icon(Icons.calendar_today_outlined),
               activeIcon: Icon(Icons.calendar_today),
               label: 'Agenda',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: 'Chat',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.account_balance_wallet_outlined),

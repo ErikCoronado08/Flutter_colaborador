@@ -46,13 +46,12 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
     }
   }
 
-  // --- MOTOR GENERADOR DEL PDF (DISEÑO TÉRMICO PROFESIONAL) ---
   Future<pw.Document> _generarPDFTicket(String folio, String fecha, String estado, String subtotal, String impuestos, String total) async {
     final pdf = pw.Document();
     
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80, // Formato de ticket de 80mm
+        pageFormat: PdfPageFormat.roll80, 
         margin: const pw.EdgeInsets.all(15),
         build: (pw.Context context) {
           return pw.Column(
@@ -65,7 +64,6 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
               pw.Divider(borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 8),
               
-              // Datos generales
               _buildPdfRow('Folio:', folio),
               _buildPdfRow('Fecha:', fecha),
               _buildPdfRow('Estado:', estado.toUpperCase()),
@@ -77,7 +75,6 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
               pw.Text('DETALLE DE IMPORTES', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 8),
               
-              // Desgloses
               _buildPdfRow('Subtotal:', '$subtotal MXN'),
               _buildPdfRow('Retenciones:', '-$impuestos MXN'),
               
@@ -85,7 +82,6 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
               pw.Divider(borderStyle: pw.BorderStyle.solid),
               pw.SizedBox(height: 8),
               
-              // Total
               _buildPdfRow('TOTAL NETO:', '$total MXN', isBold: true, size: 12),
               
               pw.SizedBox(height: 24),
@@ -100,7 +96,6 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
     return pdf;
   }
 
-  // Fila auxiliar para el PDF
   pw.Widget _buildPdfRow(String label, String value, {bool isBold = false, double size = 10}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 4),
@@ -114,7 +109,6 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
     );
   }
 
-  // Lógica principal al dar click en "Ver Ticket"
   void _verFacturaTXT() async {
     if (_datos == null || _datos!['liquidacion'] == null) return;
     
@@ -123,9 +117,13 @@ class _DetalleLiquidacionViewState extends State<DetalleLiquidacionView> {
     final impuestos = formatoMoneda.format(double.parse(_datos!['liquidacion']['desgloses']['impuestos'].toString()));
     final total = formatoMoneda.format(double.parse(_datos!['liquidacion']['monto'].toString()));
     final fecha = _datos!['factura']?['fecha'] ?? _datos!['liquidacion']['fecha'];
-    final estado = _datos!['liquidacion']['estado'];
+    final estado = _datos!['liquidacion']['estado'].toString().toUpperCase();
 
-    // Texto embellecido para compartir por WhatsApp
+    // 💡 DETERMINAMOS EL COLOR SEGÚN EL ESTADO
+    Color colorEstado = (estado == 'COMPLETADA' || estado == 'LIBERADO') 
+        ? Colors.green 
+        : (estado == 'CANCELADO' ? Colors.red : Colors.orange);
+
     final String textoParaCompartir = """
 🧾 *JOBHUB - COMPROBANTE* 🧾
 ━━━━━━━━━━━━━━━━━━━━
@@ -142,7 +140,6 @@ Retenciones:    -$impuestos MXN
 ━━━━━━━━━━━━━━━━━━━━
 """;
 
-    // Mostramos la previsualización visual del ticket
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -161,7 +158,6 @@ Retenciones:    -$impuestos MXN
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // --- CABECERA DEL TICKET ---
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: const Color(0xFFE26112).withOpacity(0.1), shape: BoxShape.circle),
@@ -172,14 +168,12 @@ Retenciones:    -$impuestos MXN
               const Text('COMPROBANTE DE OPERACIÓN', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
               const SizedBox(height: 32),
               
-              // --- DATOS DEL TICKET ---
               _buildTicketRow('Folio', folio),
               const SizedBox(height: 12),
               _buildTicketRow('Fecha', fecha),
               const SizedBox(height: 12),
-              _buildTicketRow('Estado', estado.toUpperCase(), valueColor: Colors.green),
+              _buildTicketRow('Estado', estado, valueColor: colorEstado), // 💡 APLICAMOS EL COLOR
               
-              // --- LÍNEA PUNTEADA DIVISORIA ---
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Text(
@@ -190,7 +184,6 @@ Retenciones:    -$impuestos MXN
                 ),
               ),
               
-              // --- IMPORTES ---
               _buildTicketRow('Subtotal', '$subtotal MXN'),
               const SizedBox(height: 12),
               _buildTicketRow('Retenciones', '-$impuestos MXN', valueColor: Colors.red),
@@ -200,7 +193,6 @@ Retenciones:    -$impuestos MXN
                 child: Divider(thickness: 1, height: 1),
               ),
               
-              // --- TOTAL ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -210,11 +202,9 @@ Retenciones:    -$impuestos MXN
               ),
               const SizedBox(height: 40),
               
-              // --- BOTONES DE ACCIÓN FLOTANTES ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Botón Compartir (Texto formateado para WhatsApp)
                   Column(
                     children: [
                       InkWell(
@@ -231,7 +221,6 @@ Retenciones:    -$impuestos MXN
                     ],
                   ),
                   const SizedBox(width: 40),
-                  // Botón Imprimir (Genera el PDF real y lanza la impresora)
                   Column(
                     children: [
                       InkWell(
@@ -257,7 +246,6 @@ Retenciones:    -$impuestos MXN
               ),
               const SizedBox(height: 24),
               
-              // Cerrar
               TextButton(
                 onPressed: () => Navigator.pop(context), 
                 child: const Text('Cerrar comprobante', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
@@ -269,7 +257,6 @@ Retenciones:    -$impuestos MXN
     );
   }
 
-  // Widget auxiliar para las filas del Ticket visual
   Widget _buildTicketRow(String label, String value, {Color? valueColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -372,14 +359,13 @@ Retenciones:    -$impuestos MXN
                                 const SizedBox(height: 12),
                                 _buildInfoRow('Método de pago', _datos!['servicio']['metodo']),
                                 const SizedBox(height: 12),
-                                _buildInfoRow('Estado', _datos!['liquidacion']['estado']),
+                                _buildInfoRow('Estado', _datos!['liquidacion']['estado'].toString().toUpperCase()),
                               ],
                             ),
                           ),
                           
                           const SizedBox(height: 24),
                           
-                          // BOTÓN PARA ABRIR EL COMPROBANTE
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton.icon(
