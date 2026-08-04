@@ -84,10 +84,8 @@ class _BilleteraViewState extends State<BilleteraView> {
                       bool exito = await _finanzasService.solicitarRetiro(monto);
                       if (mounted) {
                         if (exito) {
-                          // ACTUALIZACIÓN INMEDIATA en la UI
                           setState(() => saldoDisponible -= monto);
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fondos retirados con éxito'), backgroundColor: Colors.green));
-                          // Sincronizamos silenciosamente el historial
                           _sincronizarDatos();
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al retirar o saldo insuficiente'), backgroundColor: Colors.red));
@@ -212,7 +210,6 @@ class _BilleteraViewState extends State<BilleteraView> {
                         
                         const SizedBox(height: 20),
                         
-                        // NUEVO DISEÑO ESTÉTICO DEL BOTÓN (Full width, Icono y Fondo suave)
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -223,10 +220,10 @@ class _BilleteraViewState extends State<BilleteraView> {
                               style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold, letterSpacing: 0.5, fontSize: 15)
                             ),
                             style: OutlinedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE26112).withOpacity(0.06), // Tinte naranja sutil de fondo
+                              backgroundColor: const Color(0xFFE26112).withOpacity(0.06),
                               side: const BorderSide(color: Color(0xFFE26112), width: 1.5), 
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
-                              padding: const EdgeInsets.symmetric(vertical: 16) // Más alto para verse premium
+                              padding: const EdgeInsets.symmetric(vertical: 16) 
                             ),
                           )
                         ),
@@ -240,10 +237,19 @@ class _BilleteraViewState extends State<BilleteraView> {
     );
   }
 
+  // 💡 LÓGICA DE COLOR DE ESTADO APLICADA AQUÍ
   Widget _buildTransaccionItem(dynamic trx) {
     bool esRetiro = trx['tipo'] == 'retiro';
+    String estado = trx['estado'] ?? 'Pendiente';
+    bool esCompletada = estado.toLowerCase() == 'completada' || estado.toLowerCase() == 'liberado';
+    
     final formatoMoneda = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
     
+    // Determinar colores según estado
+    Color colorIcono = esRetiro ? Colors.red : (esCompletada ? Colors.green : Colors.orange);
+    Color colorFondo = esRetiro ? Colors.red.shade50 : (esCompletada ? Colors.green.shade50 : Colors.orange.shade50);
+    IconData icono = esRetiro ? Icons.arrow_upward : (esCompletada ? Icons.arrow_downward : Icons.pending_actions);
+
     return InkWell(
       onTap: () => Navigator.pushNamed(context, '/liquidacion', arguments: {'id': trx['id'].toString()}),
       child: Container(
@@ -253,8 +259,8 @@ class _BilleteraViewState extends State<BilleteraView> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: esRetiro ? Colors.red.shade50 : Colors.green.shade50, 
-              child: Icon(esRetiro ? Icons.arrow_upward : Icons.arrow_downward, color: esRetiro ? Colors.red : Colors.green, size: 20)
+              backgroundColor: colorFondo, 
+              child: Icon(icono, color: colorIcono, size: 20)
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -263,7 +269,23 @@ class _BilleteraViewState extends State<BilleteraView> {
                 children: [
                   Text(trx['cliente'] ?? 'Movimiento', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 15)),
                   const SizedBox(height: 4),
-                  Text(trx['fecha_transaccion'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  Row(
+                    children: [
+                      Text(trx['fecha_transaccion'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorFondo,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          estado.toUpperCase(),
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: colorIcono),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -272,7 +294,7 @@ class _BilleteraViewState extends State<BilleteraView> {
               children: [
                 Text(
                   (esRetiro ? '-' : '+') + formatoMoneda.format(double.parse(trx['monto'].toString())),
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: esRetiro ? Colors.red : Colors.green),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: colorIcono),
                 ),
                 const SizedBox(height: 4),
                 const Row(

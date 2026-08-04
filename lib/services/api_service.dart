@@ -96,6 +96,21 @@ class ApiService {
     }
   }
 
+  // 💡 NUEVO: Función para enviar un reporte a la BD
+  static Future<bool> enviarReporte(Map<String, dynamic> payload) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse("$baseUrlWeb/operaciones/reporte"),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ======================================
   // 2. CHAT / MENSAJES (Web)
   // ======================================
@@ -131,8 +146,30 @@ class ApiService {
     } catch (e) { return false; }
   }
 
+  static Future<bool> enviarImagenChat(String clienteId, File imagen) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+      
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrlWeb/mensajes'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      });
+      
+      request.fields['cliente_id'] = clienteId;
+      request.files.add(await http.MultipartFile.fromPath('imagen', imagen.path));
+      
+      var response = await request.send();
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print("Error enviando imagen al chat: $e");
+      return false;
+    }
+  }
+
   // ======================================
-  // 3. DASHBOARD Y PERFIL (Web)
+  // 3. DASHBOARD, PERFIL Y AYUDA (Web)
   // ======================================
   static Future<Map<String, dynamic>?> obtenerDashboard() async {
     try {
@@ -174,6 +211,20 @@ class ApiService {
     return false;
   }
 
+  // 💡 NUEVO: Traer información de la tabla de Centro de Ayuda
+  static Future<List<dynamic>> obtenerCentroAyuda() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(Uri.parse('$baseUrlWeb/centro-ayuda'), headers: headers);
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      }
+    } catch (e) {
+      print("Error obteniendo centro de ayuda: $e");
+    }
+    return [];
+  }
+
   // ======================================
   // 4. AGENDA (Web)
   // ======================================
@@ -194,9 +245,7 @@ class ApiService {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrlWeb/mis-servicios'), headers: headers);
       if (response.statusCode == 200) return jsonDecode(response.body);
-    } catch (e) {
-      print('Error al cargar mis servicios: $e');
-    }
+    } catch (e) {}
     return [];
   }
 
@@ -205,9 +254,7 @@ class ApiService {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrlWeb/catalogo-servicios'), headers: headers);
       if (response.statusCode == 200) return jsonDecode(response.body);
-    } catch (e) {
-      print('Error al cargar catálogo: $e');
-    }
+    } catch (e) {}
     return [];
   }
 

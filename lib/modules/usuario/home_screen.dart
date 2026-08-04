@@ -1,12 +1,13 @@
-﻿import 'dart:async'; // <-- IMPORTANTE PARA EL TIMER
+﻿import 'dart:async'; 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
 import '../operaciones/service_detail_screen.dart';
 import '../operaciones/solicitudes_screen.dart'; 
+import 'centro_ayuda_screen.dart'; 
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/notification_service.dart'; // <-- IMPORTANTE PARA LANZAR ALERTA
+import '../../services/notification_service.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,12 +23,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String nombreUsuario = 'Cargando...';
   String saldoDisponible = '0.00';
+  String dineroEnTransito = '0.00'; 
   String gananciasHistoricas = '0.00';
   String estadoVerificacion = 'aprobado'; 
   String? fotoPerfilUrl; 
   int numeroSolicitudes = 0; 
 
-  // NUEVAS VARIABLES PARA EL POLLING SILENCIOSO
   Timer? _timerSolicitudes;
   int _ultimoConteo = 0;
 
@@ -39,15 +40,13 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initializePreferences();
     _cargarDatosBackend();
-    _iniciarEscuchaDeSolicitudes(); // <-- INICIA EL ESCUCHADOR
+    _iniciarEscuchaDeSolicitudes(); 
   }
 
-  // LÓGICA DE ESCUCHA SILENCIOSA A LA API DE LARAVEL
   void _iniciarEscuchaDeSolicitudes() {
     _timerSolicitudes = Timer.periodic(const Duration(seconds: 15), (timer) async {
       final solicitudes = await ApiService.obtenerSolicitudes(); 
       
-      // Si el servidor nos devuelve más solicitudes de las que teníamos registradas:
       if (solicitudes.length > _ultimoConteo) {
         NotificationService().mostrarNotificacion(
           id: 1,
@@ -68,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _timerSolicitudes?.cancel(); // <-- APAGAR EL ESCUCHADOR AL SALIR
+    _timerSolicitudes?.cancel(); 
     super.dispose();
   }
 
@@ -91,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
           nombreUsuario = perfil['nombre_completo'] ?? 'Colaborador';
           estadoVerificacion = perfil['estado'] ?? 'pendiente';
           saldoDisponible = perfil['saldo_disponible']?.toString() ?? '0.00';
+          dineroEnTransito = perfil['dinero_en_transito']?.toString() ?? '0.00'; 
           gananciasHistoricas = perfil['ganancias_historicas']?.toString() ?? '0.00';
           fotoPerfilUrl = perfil['foto_perfil_url']; 
         }
@@ -100,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       
       numeroSolicitudes = solicitudes.length; 
-      _ultimoConteo = solicitudes.length; // Sincroniza el conteo local al recargar manual
+      _ultimoConteo = solicitudes.length; 
       cargando = false;
     });
   }
@@ -125,27 +125,67 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEsperaAprobacion() {
     bool isRechazado = estadoVerificacion == 'rechazado';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(isRechazado ? Icons.cancel_outlined : Icons.hourglass_empty_outlined, size: 80, color: isRechazado ? Colors.red : Colors.amber.shade600),
-          const SizedBox(height: 32),
-          Text(isRechazado ? 'Solicitud Rechazada' : 'Perfil en Revisión', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          Text(isRechazado ? 'No cumples los requisitos.' : 'Estamos validando tus documentos.', textAlign: TextAlign.center),
-          const SizedBox(height: 40),
-          ElevatedButton.icon(
-            onPressed: () async {
-              await AuthService().logout();
-              if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-            },
-            icon: const Icon(Icons.logout, color: Colors.white),
-            label: const Text('Salir', style: TextStyle(color: Colors.white)),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-          )
-        ],
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: isRechazado ? Colors.red.shade50 : Colors.amber.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isRechazado ? Icons.gpp_bad_rounded : Icons.admin_panel_settings_rounded, 
+                size: 60, 
+                color: isRechazado ? Colors.red : Colors.amber.shade600
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isRechazado ? 'Perfil Rechazado' : 'Perfil en Revisión', 
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87), 
+              textAlign: TextAlign.center
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isRechazado 
+                  ? 'Alguno de tus documentos no cumple con los requisitos. Por favor, revisa tu correo electrónico o tu portal web para corregirlo.' 
+                  : 'Tu expediente de seguridad está siendo validado por nuestro equipo. Te notificaremos cuando tu cuenta esté aprobada.', 
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await AuthService().logout();
+                  if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                },
+                icon: const Icon(Icons.logout, color: Colors.white, size: 20),
+                label: const Text('Cerrar sesión', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isRechazado ? Colors.red : AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -204,6 +244,18 @@ class _HomeScreenState extends State<HomeScreen> {
         
         GestureDetector(
           onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const CentroAyudaScreen()));
+          },
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+            child: const Icon(Icons.help_outline, color: Colors.black87),
+          ),
+        ),
+        const SizedBox(width: 12),
+        
+        GestureDetector(
+          onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const SolicitudesScreen()),
@@ -214,11 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white, 
-                  borderRadius: BorderRadius.circular(12), 
-                  border: Border.all(color: Colors.grey.shade200)
-                ),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
                 child: const Icon(Icons.notifications_none, color: Colors.black87),
               ),
               if (numeroSolicitudes > 0)
@@ -227,18 +275,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   top: -4,
                   child: Container(
                     padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '$numeroSolicitudes',
-                      style: const TextStyle(
-                        color: Colors.white, 
-                        fontSize: 10, 
-                        fontWeight: FontWeight.bold
-                      ),
-                    ),
+                    decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                    child: Text('$numeroSolicitudes', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ),
             ],
@@ -254,9 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: AppColors.primary, 
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
-        ]
+        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,17 +307,37 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Text('\$$saldoDisponible MXN', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1)),
           const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 16),
-                SizedBox(width: 8),
-                Text('Listo para retirar', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-              ],
-            ),
+          
+          // 💡 REEMPLAZAMOS EL ROW POR UN WRAP PARA EVITAR EL OVERFLOW
+          Wrap(
+            spacing: 12, // Espacio horizontal entre los elementos
+            runSpacing: 12, // Espacio vertical si bajan a la siguiente línea
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 16),
+                    SizedBox(width: 8),
+                    Text('Listo para retirar', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_clock, color: Colors.white70, size: 16),
+                    const SizedBox(width: 8),
+                    Text('Retenido: \$$dineroEnTransito', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
