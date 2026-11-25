@@ -5,7 +5,11 @@ import '../../widgets/loading_overlay.dart';
 import '../../services/auth_service.dart';
 
 class Register extends StatefulWidget {
-  const Register({super.key});
+  // Parámetros opcionales para recibir los datos de Google
+  final String? emailPrellenado;
+  final String? nombrePrellenado;
+
+  const Register({super.key, this.emailPrellenado, this.nombrePrellenado});
 
   @override
   State<Register> createState() => _RegisterState();
@@ -24,6 +28,18 @@ class _RegisterState extends State<Register> {
   final TextEditingController _experienceController = TextEditingController();
 
   final AuthService _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Si la pantalla se abre y recibe datos de Google, prellenamos los controladores
+    if (widget.nombrePrellenado != null) {
+      _nameController.text = widget.nombrePrellenado!;
+    }
+    if (widget.emailPrellenado != null) {
+      _emailController.text = widget.emailPrellenado!;
+    }
+  }
 
   @override
   void dispose() {
@@ -75,7 +91,7 @@ class _RegisterState extends State<Register> {
       return;
     }
 
-    if (password.length < 8) { // El controlador web exige mínimo 8 caracteres
+    if (password.length < 8) { 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('La contraseña debe tener al menos 8 caracteres'), backgroundColor: Colors.red)
       );
@@ -91,7 +107,6 @@ class _RegisterState extends State<Register> {
 
     setState(() => _estaCargando = true);
 
-    // Mapeo EXACTO a lo que espera el AuthController web
     final Map<String, dynamic> userData = {
       'nombre_completo': nombre,
       'email': email,

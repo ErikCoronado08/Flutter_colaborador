@@ -28,7 +28,7 @@ dependencies:
   shared_preferences: ^2.1.0
   table_calendar: ^3.0.9
   image_picker: ^1.2.2
-  file_picker: ^11.0.2
+  file_picker: ^11.0.3
   cached_network_image: ^3.2.3
   url_launcher: ^6.1.10
   flutter_local_notifications: ^22.2.0

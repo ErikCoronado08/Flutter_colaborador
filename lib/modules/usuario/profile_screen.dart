@@ -1,13 +1,14 @@
-import 'dart:convert'; 
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http; 
-import 'package:shared_preferences/shared_preferences.dart'; 
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
-import '../../services/api_service.dart'; 
-import '../../services/auth_service.dart'; 
+import '../../services/api_service.dart';
+import '../../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool embed;
@@ -20,7 +21,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
-  
+
   Map<String, dynamic>? _userData;
   List<dynamic> _documentos = [];
   bool _isLoading = true;
@@ -32,11 +33,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fetchUserProfile();
   }
 
-  // OBTENEMOS EL PERFIL Y LOS DOCUMENTOS AL MISMO TIEMPO
   Future<void> _fetchUserProfile() async {
     setState(() => _isLoading = true);
-    final dashboardData = await ApiService.obtenerDashboard(); 
-    
+    final dashboardData = await ApiService.obtenerDashboard();
+
+    if (!mounted) return;
     setState(() {
       if (dashboardData != null) {
         _userData = dashboardData['perfil'];
@@ -60,20 +61,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final exito = await ApiService.actualizarFotoPerfil(_profileImage!);
       if (exito && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto de perfil actualizada correctamente.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green)
+          const SnackBar(content: Text('Foto de perfil actualizada correctamente.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green),
         );
-        _fetchUserProfile(); 
+        _fetchUserProfile();
       }
     }
   }
 
-  // LÓGICA PARA SUBIR DOCUMENTOS (INE, Domicilio, Antecedentes, Foto)
   Future<void> _subirDocumento(String tipo) async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (pickedFile == null) return;
+    File? archivoSeleccionado;
+
+    if (tipo == 'foto') {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+      if (pickedFile != null) {
+        archivoSeleccionado = File(pickedFile.path);
+      }
+    } else {
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        archivoSeleccionado = File(result.files.single.path!);
+      }
+    }
+
+    if (archivoSeleccionado == null) return;
 
     setState(() => _isLoading = true);
-    
+
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
 
@@ -82,12 +102,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       'Accept': 'application/json',
       'Authorization': 'Bearer $token',
     });
-    
+
     request.fields['tipo'] = tipo;
-    request.files.add(await http.MultipartFile.fromPath('documento', pickedFile.path));
-    
+    request.files.add(await http.MultipartFile.fromPath('documento', archivoSeleccionado.path));
+
     var response = await request.send();
-    
+
     if (mounted) {
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Documento subido correctamente.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
@@ -98,15 +118,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // LÓGICA PARA ELIMINAR DOCUMENTO
   Future<void> _eliminarDocumento(int id) async {
     setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
-    
+
     final response = await http.delete(
       Uri.parse('https://jobhub.utptics.com/api/colaborador/perfil/documentos/$id'),
-      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'}
+      headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
     );
 
     if (mounted) {
@@ -119,7 +138,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Diálogo para editar la información del perfil
   void _mostrarModalEditarPerfil() {
     final nombreCtrl = TextEditingController(text: _userData?['nombre_completo'] ?? '');
     final telefonoCtrl = TextEditingController(text: _userData?['telefono'] ?? '');
@@ -135,7 +153,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 24, right: 24, top: 24,
+            left: 24,
+            right: 24,
+            top: 24,
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -159,10 +179,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onPressed: () async {
                       Navigator.pop(context);
                       setState(() => _isLoading = true);
-                      
+
                       final prefs = await SharedPreferences.getInstance();
                       final token = prefs.getString('token') ?? '';
-                      
+
                       final response = await http.post(
                         Uri.parse('https://jobhub.utptics.com/api/colaborador/actualizar-perfil'),
                         headers: {
@@ -227,7 +247,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             _buildCompactHeader(),
             const SizedBox(height: 24),
-            
+
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -243,7 +263,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 32),
 
-            // SECCIÓN DE DOCUMENTOS
             _buildSectionTitle('Expediente de Seguridad'),
             const SizedBox(height: 12),
             _buildDocumentosLista(),
@@ -290,7 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildCompactHeader() {
-    final String? avatarUrl = _userData?['foto_perfil_url'];
+    final String? avatarUrl = ApiService.normalizarUrl(_userData?['foto_perfil_url']?.toString());
     final String nombreCompleto = _userData?['nombre_completo'] ?? 'Colaborador';
     final String email = _userData?['email'] ?? '';
     final String ocupacion = _userData?['ocupacion'] ?? '';
@@ -304,22 +323,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               GestureDetector(
                 onTap: _pickProfileImage,
-                child: CircleAvatar(
-                  radius: 46,
-                  backgroundColor: const Color(0xFFE26112).withOpacity(0.1),
-                  backgroundImage: _profileImage != null 
-                      ? FileImage(_profileImage!) 
-                      : (avatarUrl != null ? NetworkImage(avatarUrl) as ImageProvider : null),
-                  child: (_profileImage == null && avatarUrl == null)
-                      ? const Icon(Icons.person, size: 48, color: Color(0xFFE26112))
-                      : null,
+                child: Container(
+                  width: 92,
+                  height: 92,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE26112).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: ClipOval(
+                    child: _profileImage != null
+                        ? Image.file(_profileImage!, fit: BoxFit.cover)
+                        : (avatarUrl != null
+                            ? Image.network(
+                                avatarUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 48, color: Color(0xFFE26112)),
+                              )
+                            : const Icon(Icons.person, size: 48, color: Color(0xFFE26112))),
+                  ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 2))),
                 child: const Icon(Icons.camera_alt, color: Colors.white, size: 12),
-              )
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -353,22 +381,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // WIDGET PARA DIBUJAR LOS DOCUMENTOS CON ESTADOS EN TIEMPO REAL
   Widget _buildDocumentosLista() {
-    // 💡 AQUÍ AGREGAMOS LA FOTO AL ARREGLO
     const tipos = [
       {'tipo': 'foto', 'label': 'Fotografía de Rostro'},
-      {'tipo': 'ine', 'label': 'Identificación Oficial (INE)'}, 
-      {'tipo': 'domicilio', 'label': 'Comprobante de Domicilio'}, 
-      {'tipo': 'antecedentes', 'label': 'Antecedentes no Penales'}
+      {'tipo': 'ine', 'label': 'Identificación Oficial (INE)'},
+      {'tipo': 'domicilio', 'label': 'Comprobante de Domicilio'},
+      {'tipo': 'antecedentes', 'label': 'Antecedentes no Penales'},
     ];
+
+    Future<void> verDocumento(String rawUrl) async {
+      final String? urlNormalizada = ApiService.normalizarUrl(rawUrl);
+      if (urlNormalizada == null) return;
+
+      final Uri uri = Uri.parse(urlNormalizada);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se pudo abrir el documento.'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
 
     return Column(
       children: tipos.map((docData) {
         final String tipo = docData['tipo']!;
         final String label = docData['label']!;
-        
-        // Buscamos si el documento existe en la API
+
         final docExistente = _documentos.firstWhere((d) => d['tipo'] == tipo, orElse: () => null);
 
         String estadoStr = 'NO SUBIDO';
@@ -420,31 +461,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               if (docExistente != null) ...[
-                // Botón Reemplazar
+                if (docExistente['url'] != null && docExistente['url'].toString().isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.visibility_outlined, color: Colors.blueAccent),
+                    tooltip: 'Ver documento',
+                    onPressed: () => verDocumento(docExistente['url'].toString()),
+                  ),
                 IconButton(
                   icon: const Icon(Icons.cloud_upload_outlined, color: Color(0xFFE26112)),
                   tooltip: 'Reemplazar documento',
                   onPressed: () => _subirDocumento(tipo),
                 ),
-                // Botón Eliminar
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                   tooltip: 'Eliminar',
                   onPressed: () => _eliminarDocumento(docExistente['id']),
                 ),
               ] else ...[
-                // Botón Subir Primera Vez
                 ElevatedButton(
                   onPressed: () => _subirDocumento(tipo),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE26112), 
-                    elevation: 0, 
+                    backgroundColor: const Color(0xFFE26112),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0)
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   ),
                   child: const Text('Subir', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                )
-              ]
+                ),
+              ],
             ],
           ),
         );
@@ -454,8 +498,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildSettingsGroup(List<Widget> children) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)), 
-      child: Column(children: children)
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+      child: Column(children: children),
     );
   }
 
