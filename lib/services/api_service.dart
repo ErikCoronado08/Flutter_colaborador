@@ -74,6 +74,21 @@ class ApiService {
     }
   }
 
+  static Future<bool> aceptarSolicitud(String solicitudId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse("$baseUrlWeb/mi-agenda/aceptar"),
+        headers: headers,
+        body: jsonEncode({"solicitud_id": solicitudId}),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print("Error al aceptar solicitud: $e");
+      return false;
+    }
+  }
+
   static Future<bool> rechazarSolicitud(String solicitudId) async {
     try {
       final headers = await _getHeaders();
@@ -88,13 +103,87 @@ class ApiService {
     }
   }
 
-  static Future<bool> cambiarEstadoOperativo(String id, String estado) async {
+  static Future<JsonMap?> obtenerDetalleOperacion(String idOperacion) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse("$baseUrlWeb/operaciones/detalle/$idOperacion"),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as JsonMap;
+      }
+    } catch (e) {
+      print("Error obteniendo detalle de operación: $e");
+    }
+    return null;
+  }
+
+  static Future<JsonMap> iniciarRecorrido(String idOperacion, {bool forzarFueraVentana = true}) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse("$baseUrlWeb/operaciones/iniciar-recorrido/$idOperacion"),
+        headers: headers,
+        body: jsonEncode({"forzar_fuera_ventana": forzarFueraVentana}),
+      );
+
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'status': 'success',
+          'message': data['message'] ?? 'Recorrido iniciado correctamente.',
+          'data': data,
+        };
+      }
+      return {
+        'success': false,
+        'statusCode': response.statusCode,
+        'fuera_de_ventana': data['fuera_de_ventana'] == true,
+        'message': data['message'] ?? 'No se pudo iniciar el recorrido (${response.statusCode}).',
+      };
+    } catch (e) {
+      print("Error en iniciarRecorrido: $e");
+      return {'success': false, 'message': 'Error de conexión con el servidor'};
+    }
+  }
+
+  static Future<JsonMap> confirmarLlegada(String idOperacion) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse("$baseUrlWeb/operaciones/confirmar-llegada/$idOperacion"),
+        headers: headers,
+      );
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Llegada confirmada y trabajo iniciado.',
+          'data': data,
+        };
+      }
+      return {
+        'success': false,
+        'message': data['message'] ?? 'No se pudo confirmar la llegada.',
+      };
+    } catch (e) {
+      print("Error en confirmarLlegada: $e");
+      return {'success': false, 'message': 'Error de conexión con el servidor'};
+    }
+  }
+
+  static Future<bool> cambiarEstadoOperativo(String id, String estado, {String? motivo}) async {
     try {
       final headers = await _getHeaders();
       final response = await http.patch(
         Uri.parse("$baseUrlWeb/operaciones/estado/$id"),
         headers: headers,
-        body: jsonEncode({"estado": estado}),
+        body: jsonEncode({
+          "estado": estado,
+          if (motivo != null) "motivo": motivo,
+        }),
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -102,7 +191,7 @@ class ApiService {
     }
   }
 
-  static Future<JsonMap> subirEvidencia(String servicioId, File imagen) async {
+  static Future<JsonMap> subirEvidencia(String servicioId, File imagen, {String? notasCierre}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
@@ -114,13 +203,26 @@ class ApiService {
       });
 
       request.fields['servicio_id'] = servicioId;
+      if (notasCierre != null && notasCierre.trim().isNotEmpty) {
+        request.fields['notas_cierre'] = notasCierre.trim();
+      }
       request.files.add(await http.MultipartFile.fromPath('evidencia', imagen.path));
 
-      var response = await request.send();
+      var streamed = await request.send();
+      var response = await http.Response.fromStream(streamed);
+      final dynamic data = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+
       if (response.statusCode == 200) {
-        return {'success': true, 'message': 'Evidencia subida correctamente'};
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Evidencia subida correctamente',
+          'data': data,
+        };
       }
-      return {'success': false, 'message': 'Error al procesar el cobro'};
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Error al finalizar el trabajo',
+      };
     } catch (e) {
       return {'success': false, 'message': 'Error de conexión'};
     }

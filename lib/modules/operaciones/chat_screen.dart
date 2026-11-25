@@ -40,6 +40,18 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  bool _esImagen(dynamic message) {
+    if (message == null) return false;
+    final tipo = (message['tipo_mensaje'] ?? '').toString().toLowerCase();
+    if (tipo == 'imagen') return true;
+    final contenido = (message['contenido'] ?? '').toString().trim().toLowerCase();
+    return (contenido.startsWith('/storage/') || contenido.startsWith('http')) &&
+        (contenido.endsWith('.jpg') ||
+            contenido.endsWith('.jpeg') ||
+            contenido.endsWith('.png') ||
+            contenido.endsWith('.webp'));
+  }
+
   Future<void> _obtenerMensajesDelChat() async {
     var msg = await ApiService.obtenerChat(widget.clienteId);
     if (!mounted) return;
@@ -56,9 +68,9 @@ class _ChatScreenState extends State<ChatScreen> {
     var msg = await ApiService.obtenerChat(widget.clienteId);
     if (mounted && !_isUploadingImage) {
       for (var newMsg in msg) {
-        if (newMsg['tipo_mensaje'] == 'imagen') {
+        if (_esImagen(newMsg)) {
           for (var currentMsg in _messages) {
-            if (currentMsg['tipo_mensaje'] == 'imagen' && currentMsg['local_image'] != null) {
+            if (_esImagen(currentMsg) && currentMsg['local_image'] != null) {
               if (currentMsg['id'] == newMsg['id'] || currentMsg['id'] == null) {
                 newMsg['local_image'] = currentMsg['local_image'];
                 break;
@@ -112,7 +124,6 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       _obtenerMensajesDelChat();
     } else {
-      // Sincroniza para obtener el ID real de la BD y permitir borrarlo
       _obtenerMensajesDelChatSilencioso();
     }
   }
@@ -157,6 +168,37 @@ class _ChatScreenState extends State<ChatScreen> {
             child: const Text('Eliminar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _abrirVistaPreviaImagen({File? localFile, String? networkUrl}) {
+    if (localFile == null && networkUrl == null) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              child: localFile != null
+                  ? Image.file(localFile, fit: BoxFit.contain)
+                  : Image.network(networkUrl!, fit: BoxFit.contain),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -235,11 +277,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _construirContenidoMensaje(dynamic message, bool mine) {
-    if (message['tipo_mensaje'] == 'imagen') {
+    if (_esImagen(message)) {
       if (message['local_image'] != null) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(message['local_image'], width: 220, height: 220, fit: BoxFit.cover),
+        final File localFile = message['local_image'] as File;
+        return GestureDetector(
+          onTap: () => _abrirVistaPreviaImagen(localFile: localFile),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(localFile, width: 220, height: 220, fit: BoxFit.cover),
+          ),
         );
       } else {
         final String? url = ApiService.normalizarUrl(message['contenido']?.toString());
@@ -252,25 +298,38 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
 
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            url,
-            width: 220,
-            height: 220,
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return SizedBox(
-                width: 220,
-                height: 220,
-                child: Center(child: CircularProgressIndicator(color: mine ? Colors.white : const Color(0xFFE26112))),
-              );
-            },
-            errorBuilder: (_, __, ___) => SizedBox(
+        return GestureDetector(
+          onTap: () => _abrirVistaPreviaImagen(networkUrl: url),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              url,
               width: 220,
               height: 220,
-              child: Center(child: Icon(Icons.broken_image, color: mine ? Colors.white54 : Colors.grey.shade400, size: 40)),
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return SizedBox(
+                  width: 220,
+                  height: 220,
+                  child: Center(child: CircularProgressIndicator(color: mine ? Colors.white : const Color(0xFFE26112))),
+                );
+              },
+              errorBuilder: (_, __, ___) => SizedBox(
+                width: 220,
+                height: 220,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.broken_image, color: mine ? Colors.white70 : Colors.grey.shade400, size: 40),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Imagen no disponible',
+                      style: TextStyle(color: mine ? Colors.white70 : Colors.grey.shade500, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -374,6 +433,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           itemBuilder: (context, index) {
                             final message = _messages[index];
                             final bool mine = message['tipo'] == 'enviado';
+                            final bool esImg = _esImagen(message);
 
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -396,8 +456,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                           : null,
                                       child: Container(
                                         padding: EdgeInsets.symmetric(
-                                          horizontal: message['tipo_mensaje'] == 'imagen' ? 6 : 16,
-                                          vertical: message['tipo_mensaje'] == 'imagen' ? 6 : 12,
+                                          horizontal: esImg ? 6 : 16,
+                                          vertical: esImg ? 6 : 12,
                                         ),
                                         decoration: BoxDecoration(
                                           gradient: mine
