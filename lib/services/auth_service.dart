@@ -12,7 +12,7 @@ class AuthService {
     scopes: ['email', 'profile'],
   );
 
-  Future<void> _guardarToken(String token) async {
+    Future<void> _guardarToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', token);
   }
@@ -105,7 +105,6 @@ class AuthService {
     }
   }
 
-  // --- CORRECCIÓN EN LOS NOMBRES DE LOS CAMPOS ---
   Future<Map<String, dynamic>> subirDocumentos({
     required File ine,
     required File comprobante,
@@ -118,7 +117,6 @@ class AuthService {
       
       request.headers.addAll({'Accept': 'application/json', 'Authorization': 'Bearer $token'});
 
-      // Los nombres 'domicilio' y 'foto' deben ser EXACTAMENTE estos para que Laravel los acepte
       request.files.add(await http.MultipartFile.fromPath('ine', ine.path));
       request.files.add(await http.MultipartFile.fromPath('domicilio', comprobante.path)); 
       request.files.add(await http.MultipartFile.fromPath('foto', fotoPerfil.path));       
@@ -130,6 +128,24 @@ class AuthService {
           : {'success': false, 'message': 'Error al subir documentos'};
     } catch (e) {
       return {'success': false, 'message': 'Error de conexión'};
+    }
+  }
+
+  Future<Map<String, dynamic>> recuperarPassword(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrlWeb/olvide-password'),
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: json.encode({'email': email}),
+      );
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Enlace enviado'};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Error al solicitar el enlace'};
+    } catch (e) {
+      return {'success': false, 'message': 'Error de conexión con el servidor'};
     }
   }
 

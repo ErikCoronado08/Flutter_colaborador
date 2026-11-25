@@ -3,10 +3,36 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ApiService {
-  static const String baseUrlWeb = "https://jobhub.utptics.com/api/colaborador"; 
+typedef HeaderMap = Map<String, String>;
+typedef JsonMap = Map<String, dynamic>;
 
-  static Future<Map<String, String>> _getHeaders() async {
+class ApiService {
+  static const String baseUrlWeb = "https://jobhub.utptics.com/api/colaborador";
+
+  static String? normalizarUrl(String? rawUrl) {
+    if (rawUrl == null) return null;
+    String url = rawUrl.trim();
+    if (url.isEmpty || url == 'null') return null;
+
+    url = url.replaceAll('/storage/storage/', '/storage/');
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    if (url.startsWith('/')) url = url.substring(1);
+    if (url.startsWith('public/')) {
+      url = url.replaceFirst('public/', 'storage/');
+    }
+    while (url.startsWith('storage/storage/')) {
+      url = url.replaceFirst('storage/', '');
+    }
+    if (!url.startsWith('storage/')) {
+      url = 'storage/$url';
+    }
+    return 'https://jobhub.utptics.com/$url';
+  }
+
+  static Future<HeaderMap> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
     return {
@@ -27,13 +53,13 @@ class ApiService {
         final data = jsonDecode(response.body);
         if (data['solicitudes'] != null) return data['solicitudes'] as List<dynamic>;
       }
-    } catch (e) { 
-      print("Error obteniendo solicitudes: $e"); 
+    } catch (e) {
+      print("Error obteniendo solicitudes: $e");
     }
     return [];
   }
 
-  static Future<bool> agendarSolicitud(Map<String, dynamic> payload) async {
+  static Future<bool> agendarSolicitud(JsonMap payload) async {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
@@ -57,7 +83,9 @@ class ApiService {
         body: jsonEncode({"solicitud_id": solicitudId}),
       );
       return response.statusCode == 200;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
   static Future<bool> cambiarEstadoOperativo(String id, String estado) async {
@@ -69,23 +97,25 @@ class ApiService {
         body: jsonEncode({"estado": estado}),
       );
       return response.statusCode == 200;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
-  static Future<Map<String, dynamic>> subirEvidencia(String servicioId, File imagen) async {
+  static Future<JsonMap> subirEvidencia(String servicioId, File imagen) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-      
+
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrlWeb/operaciones/subir-evidencia'));
       request.headers.addAll({
         'Accept': 'application/json',
         'Authorization': 'Bearer $token',
       });
-      
+
       request.fields['servicio_id'] = servicioId;
       request.files.add(await http.MultipartFile.fromPath('evidencia', imagen.path));
-      
+
       var response = await request.send();
       if (response.statusCode == 200) {
         return {'success': true, 'message': 'Evidencia subida correctamente'};
@@ -96,8 +126,7 @@ class ApiService {
     }
   }
 
-  // 💡 NUEVO: Función para enviar un reporte a la BD
-  static Future<bool> enviarReporte(Map<String, dynamic> payload) async {
+  static Future<bool> enviarReporte(JsonMap payload) async {
     try {
       final headers = await _getHeaders();
       final response = await http.post(
@@ -143,23 +172,25 @@ class ApiService {
         body: jsonEncode({"cliente_id": clienteId, "contenido": mensaje}),
       );
       return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 
   static Future<bool> enviarImagenChat(String clienteId, File imagen) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-      
+
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrlWeb/mensajes'));
       request.headers.addAll({
         'Accept': 'application/json',
         'Authorization': 'Bearer $token',
       });
-      
+
       request.fields['cliente_id'] = clienteId;
       request.files.add(await http.MultipartFile.fromPath('imagen', imagen.path));
-      
+
       var response = await request.send();
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
@@ -168,10 +199,24 @@ class ApiService {
     }
   }
 
+  static Future<bool> eliminarMensaje(String mensajeId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.delete(
+        Uri.parse("$baseUrlWeb/mensajes/$mensajeId"),
+        headers: headers,
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Error eliminando mensaje: $e");
+      return false;
+    }
+  }
+
   // ======================================
   // 3. DASHBOARD, PERFIL Y AYUDA (Web)
   // ======================================
-  static Future<Map<String, dynamic>?> obtenerDashboard() async {
+  static Future<JsonMap?> obtenerDashboard() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrlWeb/mi-dashboard-colaborador'), headers: headers);
@@ -180,12 +225,12 @@ class ApiService {
     return null;
   }
 
-  static Future<Map<String, dynamic>?> obtenerPerfilUsuario() async {
+  static Future<JsonMap?> obtenerPerfilUsuario() async {
     final dash = await obtenerDashboard();
     return dash != null ? dash['perfil'] : null;
   }
 
-  static Future<Map<String, dynamic>?> obtenerEstadisticas() async {
+  static Future<JsonMap?> obtenerEstadisticas() async {
     final dash = await obtenerDashboard();
     return dash != null ? dash['estadisticas'] : null;
   }
@@ -200,7 +245,7 @@ class ApiService {
         'Accept': 'application/json',
         'Authorization': 'Bearer $token',
       });
-      
+
       request.files.add(await http.MultipartFile.fromPath('foto_perfil', imagen.path));
 
       var response = await request.send();
@@ -211,7 +256,6 @@ class ApiService {
     return false;
   }
 
-  // 💡 NUEVO: Traer información de la tabla de Centro de Ayuda
   static Future<List<dynamic>> obtenerCentroAyuda() async {
     try {
       final headers = await _getHeaders();
@@ -228,7 +272,7 @@ class ApiService {
   // ======================================
   // 4. AGENDA (Web)
   // ======================================
-  static Future<Map<String, dynamic>?> obtenerAgendaCompleta() async {
+  static Future<JsonMap?> obtenerAgendaCompleta() async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(Uri.parse('$baseUrlWeb/mi-agenda'), headers: headers);
@@ -258,12 +302,31 @@ class ApiService {
     return [];
   }
 
-  static Future<bool> crearServicio(Map<String, dynamic> data) async {
+  static Future<bool> crearServicio(JsonMap data, {File? foto}) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.post(Uri.parse('$baseUrlWeb/mis-servicios'), headers: headers, body: jsonEncode(data));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrlWeb/mis-servicios'));
+      request.headers.addAll({
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      });
+
+      data.forEach((key, value) {
+        if (value != null) {
+          request.fields[key] = value.toString();
+        }
+      });
+
+      if (foto != null) {
+        request.files.add(await http.MultipartFile.fromPath('foto', foto.path));
+      }
+
+      var response = await request.send();
       return response.statusCode == 201 || response.statusCode == 200;
     } catch (e) {
+      print("Error al crear servicio: $e");
       return false;
     }
   }

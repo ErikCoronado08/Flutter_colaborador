@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart'; 
 import '../../services/auth_service.dart'; 
+import 'recuperar_password.dart';
+import 'register.dart'; // Importamos la vista de registro para poder mandarle los datos
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -17,7 +19,7 @@ class _LoginState extends State<Login> {
   final TextEditingController _passwordController = TextEditingController();
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: '923305570744-pvm4f5u07ht0pne9egs0d78boqt21lp6.apps.googleusercontent.com',
+    clientId: '609420967991-cjmhmoruui3vdehbusr1jiulcfprm8se.apps.googleusercontent.com',
     scopes: ['email', 'profile'],
   );
 
@@ -69,48 +71,43 @@ class _LoginState extends State<Login> {
     }
   }
 
+  // --- NUEVA LÓGICA DE GOOGLE PARA REDIRIGIR AL REGISTRO ---
   Future<void> _handleGoogleSignIn() async {
     setState(() => _estaCargando = true);
     
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
       if (googleUser == null) {
+        // El usuario canceló la ventana de selección de cuenta
         setState(() => _estaCargando = false);
         return; 
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final resultado = await _authService.loginGoogle(googleAuth.idToken!);
+      // Extraemos los datos que nos da Google
+      final String correo = googleUser.email;
+      final String nombre = googleUser.displayName ?? '';
 
-      if (mounted) {
-        if (resultado['success']) {
-          final statusRes = await _authService.verificarStatus();
-          setState(() => _estaCargando = false);
+      setState(() => _estaCargando = false);
 
-          if (statusRes['success']) {
-            bool documentosCompletos = statusRes['data']['documentos_completos'] ?? false;
-            if (!documentosCompletos) {
-              Navigator.pushReplacementNamed(context, '/documents');
-            } else {
-              Navigator.pushReplacementNamed(context, '/'); 
-            }
-          } else {
-            Navigator.pushReplacementNamed(context, '/'); 
-          }
-        } else {
-          setState(() => _estaCargando = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
-          );
-        }
-      }
+      // Redirigimos DIRECTAMENTE al registro con los datos prellenados
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Register(
+            emailPrellenado: correo,
+            nombrePrellenado: nombre,
+          ),
+        ),
+      );
+
     } catch (e) {
-      if (mounted) {
-        setState(() => _estaCargando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al procesar la cuenta de Google'), backgroundColor: Colors.red),
-        );
-      }
+      setState(() => _estaCargando = false);
+      print("===== ERROR GOOGLE SIGN IN =====");
+      print(e.toString());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al procesar la cuenta de Google.'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -193,7 +190,18 @@ class _LoginState extends State<Login> {
                       ),
                       const SizedBox(height: 12),
 
-                      Align(alignment: Alignment.centerRight, child: GestureDetector(onTap: () {}, child: const Text("¿Olvidaste tu contraseña?", style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.w500)))),
+                      Align(
+                        alignment: Alignment.centerRight, 
+                        child: GestureDetector(
+                          onTap: () {
+                             Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const RecuperarPassword()),
+                            );
+                          }, 
+                          child: const Text("¿Olvidaste tu contraseña?", style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.w500))
+                        )
+                      ),
                       const SizedBox(height: 25),
 
                       SizedBox(
@@ -229,7 +237,7 @@ class _LoginState extends State<Login> {
                         child: Container(
                           width: double.infinity,
                           height: 55,
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Color(0xFFDADADA))),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFDADADA))),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -259,7 +267,6 @@ class _LoginState extends State<Login> {
             ),
           ),
           
-          // NUEVO INDICADOR DE CARGA (Reemplaza al LoadingOverlay)
           if (_estaCargando)
             Container(
               color: Colors.black.withOpacity(0.3),

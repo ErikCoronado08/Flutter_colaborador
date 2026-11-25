@@ -1,13 +1,13 @@
-﻿import 'dart:async'; 
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
 import '../operaciones/service_detail_screen.dart';
-import '../operaciones/solicitudes_screen.dart'; 
-import 'centro_ayuda_screen.dart'; 
+import '../operaciones/solicitudes_screen.dart';
+import 'centro_ayuda_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/notification_service.dart'; 
+import '../../services/notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,11 +23,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String nombreUsuario = 'Cargando...';
   String saldoDisponible = '0.00';
-  String dineroEnTransito = '0.00'; 
+  String dineroEnTransito = '0.00';
   String gananciasHistoricas = '0.00';
-  String estadoVerificacion = 'aprobado'; 
-  String? fotoPerfilUrl; 
-  int numeroSolicitudes = 0; 
+  String estadoVerificacion = 'aprobado';
+  String? fotoPerfilUrl;
+  int numeroSolicitudes = 0;
 
   Timer? _timerSolicitudes;
   int _ultimoConteo = 0;
@@ -40,13 +40,13 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initializePreferences();
     _cargarDatosBackend();
-    _iniciarEscuchaDeSolicitudes(); 
+    _iniciarEscuchaDeSolicitudes();
   }
 
   void _iniciarEscuchaDeSolicitudes() {
     _timerSolicitudes = Timer.periodic(const Duration(seconds: 15), (timer) async {
-      final solicitudes = await ApiService.obtenerSolicitudes(); 
-      
+      final solicitudes = await ApiService.obtenerSolicitudes();
+
       if (solicitudes.length > _ultimoConteo) {
         NotificationService().mostrarNotificacion(
           id: 1,
@@ -55,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
           payload: 'nueva_solicitud',
         );
       }
-      
+
       if (mounted) {
         setState(() {
           numeroSolicitudes = solicitudes.length;
@@ -67,12 +67,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _timerSolicitudes?.cancel(); 
+    _timerSolicitudes?.cancel();
     super.dispose();
   }
 
   Future<void> _initializePreferences() async {
     _prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() => disponible = _prefs.getBool('disponible') ?? true);
   }
 
@@ -80,27 +81,28 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => cargando = true);
 
     final data = await ApiService.obtenerDashboard();
-    final solicitudes = await ApiService.obtenerSolicitudes(); 
+    final solicitudes = await ApiService.obtenerSolicitudes();
 
+    if (!mounted) return;
     setState(() {
       if (data != null) {
         final perfil = data['perfil'];
-        
+
         if (perfil != null) {
           nombreUsuario = perfil['nombre_completo'] ?? 'Colaborador';
           estadoVerificacion = perfil['estado'] ?? 'pendiente';
           saldoDisponible = perfil['saldo_disponible']?.toString() ?? '0.00';
-          dineroEnTransito = perfil['dinero_en_transito']?.toString() ?? '0.00'; 
+          dineroEnTransito = perfil['dinero_en_transito']?.toString() ?? '0.00';
           gananciasHistoricas = perfil['ganancias_historicas']?.toString() ?? '0.00';
-          fotoPerfilUrl = perfil['foto_perfil_url']; 
+          fotoPerfilUrl = perfil['foto_perfil_url']?.toString();
         }
 
         proximosServicios = data['servicios'] ?? [];
         transaccionesRecientes = data['transacciones'] ?? [];
       }
-      
-      numeroSolicitudes = solicitudes.length; 
-      _ultimoConteo = solicitudes.length; 
+
+      numeroSolicitudes = solicitudes.length;
+      _ultimoConteo = solicitudes.length;
       cargando = false;
     });
   }
@@ -113,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: RefreshIndicator(
           onRefresh: _cargarDatosBackend,
           color: AppColors.primary,
-          child: cargando 
+          child: cargando
               ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
               : (estadoVerificacion == 'pendiente' || estadoVerificacion == 'rechazado')
                   ? _buildEsperaAprobacion()
@@ -134,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10)),
           ],
         ),
         child: Column(
@@ -147,22 +149,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isRechazado ? Icons.gpp_bad_rounded : Icons.admin_panel_settings_rounded, 
-                size: 60, 
-                color: isRechazado ? Colors.red : Colors.amber.shade600
+                isRechazado ? Icons.gpp_bad_rounded : Icons.admin_panel_settings_rounded,
+                size: 60,
+                color: isRechazado ? Colors.red : Colors.amber.shade600,
               ),
             ),
             const SizedBox(height: 24),
             Text(
-              isRechazado ? 'Perfil Rechazado' : 'Perfil en Revisión', 
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87), 
-              textAlign: TextAlign.center
+              isRechazado ? 'Perfil Rechazado' : 'Perfil en Revisión',
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
-              isRechazado 
-                  ? 'Alguno de tus documentos no cumple con los requisitos. Por favor, revisa tu correo electrónico o tu portal web para corregirlo.' 
-                  : 'Tu expediente de seguridad está siendo validado por nuestro equipo. Te notificaremos cuando tu cuenta esté aprobada.', 
+              isRechazado
+                  ? 'Alguno de tus documentos no cumple con los requisitos. Por favor, revisa tu correo electrónico o tu portal web para corregirlo.'
+                  : 'Tu expediente de seguridad está siendo validado por nuestro equipo. Te notificaremos cuando tu cuenta esté aprobada.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.5),
             ),
@@ -183,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   elevation: 0,
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -200,36 +202,47 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 16),
         _buildStatsRow(),
         const SizedBox(height: 32),
-        
+
         _buildSectionTitle('Servicios en Curso', Icons.work_outline),
         const SizedBox(height: 12),
         if (proximosServicios.isEmpty)
           _buildEmptyState('No tienes servicios agendados por el momento.')
         else
           ...proximosServicios.map((s) => _buildServiceCard(s, context)),
-          
+
         const SizedBox(height: 32),
-        
+
         _buildSectionTitle('Transacciones Recientes', Icons.receipt_long_outlined),
         const SizedBox(height: 12),
         if (transaccionesRecientes.isEmpty)
           _buildEmptyState('No hay movimientos recientes.')
         else
-          ...transaccionesRecientes.take(3).map((t) => _buildTransactionCard(t)), 
+          ...transaccionesRecientes.take(3).map((t) => _buildTransactionCard(t)),
       ],
     );
   }
 
   Widget _buildHeader(BuildContext context) {
+    final String? avatarNormalizado = ApiService.normalizarUrl(fotoPerfilUrl);
+
     return Row(
       children: [
-        CircleAvatar(
-          radius: 28, 
-          backgroundColor: AppColors.primary.withOpacity(0.1),
-          backgroundImage: fotoPerfilUrl != null ? NetworkImage(fotoPerfilUrl!) : null,
-          child: fotoPerfilUrl == null 
-              ? const Icon(Icons.person, color: AppColors.primary, size: 30) 
-              : null,
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: ClipOval(
+            child: avatarNormalizado != null
+                ? Image.network(
+                    avatarNormalizado,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.person, color: AppColors.primary, size: 30),
+                  )
+                : const Icon(Icons.person, color: AppColors.primary, size: 30),
+          ),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -241,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        
+
         GestureDetector(
           onTap: () {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const CentroAyudaScreen()));
@@ -253,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(width: 12),
-        
+
         GestureDetector(
           onTap: () {
             Navigator.push(
@@ -281,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -290,9 +303,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.primary, 
+        color: AppColors.primary,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]
+        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,11 +320,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Text('\$$saldoDisponible MXN', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1)),
           const SizedBox(height: 20),
-          
-          // 💡 REEMPLAZAMOS EL ROW POR UN WRAP PARA EVITAR EL OVERFLOW
           Wrap(
-            spacing: 12, // Espacio horizontal entre los elementos
-            runSpacing: 12, // Espacio vertical si bajan a la siguiente línea
+            spacing: 12,
+            runSpacing: 12,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -437,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final monto = trx['monto']?.toString() ?? '0.00';
     final tipo = trx['tipo'] ?? 'Desconocido';
     final estado = trx['estado'] ?? 'pendiente';
-    
+
     bool isIngreso = tipo.toString().toLowerCase() != 'retiro';
 
     return Container(
@@ -448,16 +459,16 @@ class _HomeScreenState extends State<HomeScreen> {
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: isIngreso ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1), 
-            shape: BoxShape.circle
+            color: isIngreso ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+            shape: BoxShape.circle,
           ),
           child: Icon(isIngreso ? Icons.arrow_downward : Icons.arrow_upward, color: isIngreso ? Colors.green : Colors.orange, size: 20),
         ),
         title: Text(tipo.toString().toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87)),
         subtitle: Text(estado, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
         trailing: Text(
-          '${isIngreso ? '+' : '-'}\$$monto', 
-          style: TextStyle(color: isIngreso ? Colors.green : Colors.black87, fontWeight: FontWeight.bold, fontSize: 16)
+          '${isIngreso ? '+' : '-'}\$$monto',
+          style: TextStyle(color: isIngreso ? Colors.green : Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
         ),
       ),
     );
