@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 import 'mapa_servicio_screen.dart';
 import 'chat_screen.dart';
 
-class AceptadoScreen extends StatelessWidget {
+class AceptadoScreen extends StatefulWidget {
   final Map<String, dynamic> trabajo;
   final double miRating;
 
@@ -13,21 +14,70 @@ class AceptadoScreen extends StatelessWidget {
   });
 
   @override
+  State<AceptadoScreen> createState() => _AceptadoScreenState();
+}
+
+class _AceptadoScreenState extends State<AceptadoScreen> {
+  bool _iniciandoRuta = false;
+
+  Future<void> _manejarIniciarRuta() async {
+    if (_iniciandoRuta) return;
+
+    final String idOperacion = (widget.trabajo['id'] ?? '').toString();
+    setState(() => _iniciandoRuta = true);
+
+    if (idOperacion.isNotEmpty) {
+      final res = await ApiService.iniciarRecorrido(idOperacion, forzarFueraVentana: true);
+      if (!mounted) return;
+
+      if (res['success'] != true) {
+        setState(() => _iniciandoRuta = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'No se pudo iniciar la ruta'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() => _iniciandoRuta = false);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapaServicioScreen(trabajo: widget.trabajo),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Obtenemos el ID del cliente para el chat web
+    final trabajo = widget.trabajo;
     final String clienteId = (trabajo['cliente_id'] ?? '').toString();
     final String nombreCliente = trabajo['cliente'] ?? trabajo['nombre'] ?? 'Cliente';
-    
+
     final String categoriaTitulo = trabajo['titulo'] ?? trabajo['categoria'] ?? 'General';
     final String direccionServicio = trabajo['direccion'] ?? 'Dirección registrada por el cliente';
-    final String precioServicio = trabajo['precio'] ?? '\$350.00 MXN';
+    final String precioServicio = trabajo['monto'] ?? trabajo['precio'] ?? '\$350.00 MXN';
 
     Color colorCategoria;
     switch (categoriaTitulo.toLowerCase()) {
-      case 'plomería': case 'plomeria': colorCategoria = Colors.blue; break;
-      case 'jardinería': case 'jardineria': colorCategoria = Colors.green; break;
-      case 'electricidad': colorCategoria = Colors.amber.shade700; break;
-      default: colorCategoria = Colors.purple;
+      case 'plomería':
+      case 'plomeria':
+        colorCategoria = Colors.blue;
+        break;
+      case 'jardinería':
+      case 'jardineria':
+        colorCategoria = Colors.green;
+        break;
+      case 'electricidad':
+        colorCategoria = Colors.amber.shade700;
+        break;
+      default:
+        colorCategoria = Colors.purple;
     }
 
     return Scaffold(
@@ -52,12 +102,12 @@ class AceptadoScreen extends StatelessWidget {
               const Text('¡TRABAJO ASIGNADO!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
               const SizedBox(height: 12),
               Text(
-                'Tu alta calificación de $miRating ★ te otorgó prioridad absoluta sobre la orden de $nombreCliente.',
+                'Tu alta calificación de ${widget.miRating} ★ te otorgó prioridad absoluta sobre la orden de $nombreCliente.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 15, color: Colors.grey, height: 1.5),
               ),
               const SizedBox(height: 30),
-              
+
               // BOTÓN DE CHAT INTEGRADO
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
@@ -66,7 +116,6 @@ class AceptadoScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
-                  // Enviamos al Chat real con el ID del cliente
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -80,7 +129,7 @@ class AceptadoScreen extends StatelessWidget {
                 icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFFE26112)),
                 label: const Text('ABRIR CHAT CON EL CLIENTE', style: TextStyle(color: Color(0xFFE26112), fontWeight: FontWeight.bold)),
               ),
-              
+
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(20),
@@ -135,16 +184,18 @@ class AceptadoScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MapaServicioScreen(trabajo: trabajo),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.directions_car, color: Colors.white, size: 20),
-                  label: const Text('INICIAR RUTA AL EMPLEO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  onPressed: _iniciandoRuta ? null : _manejarIniciarRuta,
+                  icon: _iniciandoRuta
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.directions_car, color: Colors.white, size: 20),
+                  label: Text(
+                    _iniciandoRuta ? 'INICIANDO RUTA...' : 'INICIAR RUTA AL EMPLEO',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
                 ),
               ),
             ],

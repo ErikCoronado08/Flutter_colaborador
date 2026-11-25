@@ -16,11 +16,10 @@ class MapaServicioScreen extends StatefulWidget {
 
 class _MapaServicioScreenState extends State<MapaServicioScreen> {
   final MapController _mapController = MapController();
-  
-  // Coordenadas locales de respaldo por si falla la API
-  LatLng _posicionActual = const LatLng(20.96, -89.61); 
+
+  LatLng _posicionActual = const LatLng(20.967370, -89.592586);
   late LatLng _coordenadasDestino;
-  
+
   bool _cargando = true;
   List<LatLng> _puntosRuta = [];
   String _tiempoEstimado = "Calculando...";
@@ -30,15 +29,17 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
   @override
   void initState() {
     super.initState();
-    
-    // Tratamos de extraer coordenadas si existen en la respuesta del backend
-    final ubicacion = widget.trabajo['ubicacion'];
-    double destLat = 20.96;
-    double destLng = -89.61;
 
-    if (ubicacion != null) {
-      destLat = double.tryParse(ubicacion['lat'].toString()) ?? 20.96;
-      destLng = double.tryParse(ubicacion['lng'].toString()) ?? -89.61;
+    final ubicacion = widget.trabajo['ubicacion'];
+    double destLat = 20.967370;
+    double destLng = -89.592586;
+
+    if (ubicacion is Map) {
+      destLat = double.tryParse((ubicacion['lat'] ?? ubicacion['latitud'] ?? '').toString()) ?? destLat;
+      destLng = double.tryParse((ubicacion['lng'] ?? ubicacion['longitud'] ?? '').toString()) ?? destLng;
+    } else if (widget.trabajo['latitud'] != null && widget.trabajo['longitud'] != null) {
+      destLat = double.tryParse(widget.trabajo['latitud'].toString()) ?? destLat;
+      destLng = double.tryParse(widget.trabajo['longitud'].toString()) ?? destLng;
     }
 
     _coordenadasDestino = LatLng(destLat, destLng);
@@ -47,19 +48,21 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
 
   Future<void> _inicializarMapaYGPS() async {
     setState(() => _cargando = true);
-    
-    LocationPermission permiso = await Geolocator.checkPermission();
-    if (permiso == LocationPermission.denied) {
-      permiso = await Geolocator.requestPermission();
-    }
 
     try {
-      Position position = await Geolocator.getCurrentPosition(
-        timeLimit: const Duration(seconds: 4)
-      );
-      _posicionActual = LatLng(position.latitude, position.longitude);
+      LocationPermission permiso = await Geolocator.checkPermission();
+      if (permiso == LocationPermission.denied) {
+        permiso = await Geolocator.requestPermission();
+      }
+
+      if (permiso == LocationPermission.whileInUse || permiso == LocationPermission.always) {
+        Position position = await Geolocator.getCurrentPosition(
+          timeLimit: const Duration(seconds: 4),
+        );
+        _posicionActual = LatLng(position.latitude, position.longitude);
+      }
     } catch (e) {
-      debugPrint("El GPS tardó, usando ubicación base.");
+      debugPrint("El GPS tardó o no está disponible, usando ubicación base.");
     }
 
     await _obtenerRutaDesdeAPI();
@@ -70,7 +73,7 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
   }
 
   Future<void> _obtenerRutaDesdeAPI() async {
-    final String url = 
+    final String url =
         'https://api.openrouteservice.org/v2/directions/driving-car'
         '?api_key=$_orsApiKey'
         '&start=${_posicionActual.longitude},${_posicionActual.latitude}'
@@ -78,14 +81,14 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
 
     try {
       final response = await http.get(Uri.parse(url));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List<dynamic> coords = data['features'][0]['geometry']['coordinates'];
-        final double segundos = data['features'][0]['properties']['summary']['duration'];
+        final double segundos = (data['features'][0]['properties']['summary']['duration'] as num).toDouble();
 
         setState(() {
-          _puntosRuta = coords.map((c) => LatLng(c[1], c[0])).toList();
+          _puntosRuta = coords.map((c) => LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble())).toList();
           _tiempoEstimado = "${(segundos / 60).round()} min";
         });
       } else {
@@ -106,95 +109,92 @@ class _MapaServicioScreenState extends State<MapaServicioScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _cargando 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
-        : Stack(
-            children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  center: _posicionActual,
-                  zoom: 14.0,
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.jobhub.colaborador',
+      body: _cargando
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE26112)))
+          : Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _posicionActual,
+                    initialZoom: 14.0,
                   ),
-
-                  if (_puntosRuta.isNotEmpty)
-                    PolylineLayer(
-                      polylines: [
-                        Polyline(
-                          points: _puntosRuta,
-                          strokeWidth: 5.5,
-                          color: Colors.blue.shade700,
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.jobhub.colaborador',
+                    ),
+                    if (_puntosRuta.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: _puntosRuta,
+                            strokeWidth: 5.5,
+                            color: Colors.blue.shade700,
+                          ),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _posicionActual,
+                          width: 45,
+                          height: 45,
+                          child: Icon(Icons.navigation, color: Colors.blue.shade800, size: 35),
+                        ),
+                        Marker(
+                          point: _coordenadasDestino,
+                          width: 45,
+                          height: 45,
+                          child: const Icon(Icons.location_on, color: Colors.red, size: 40),
                         ),
                       ],
                     ),
-
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: _posicionActual,
-                        width: 45,
-                        height: 45,
-                        child: Icon(Icons.navigation, color: Colors.blue.shade800, size: 35),
-                      ),
-                      Marker(
-                        point: _coordenadasDestino,
-                        width: 45,
-                        height: 45,
-                        child: const Icon(Icons.location_on, color: Colors.red, size: 40),
-                      ),
-                    ],
+                  ],
+                ),
+                Positioned(
+                  top: 50,
+                  left: 20,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.black),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ),
-                ],
-              ),
-
-              Positioned(
-                top: 50,
-                left: 20,
-                child: CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
+                ),
+                Positioned(
+                  top: 50,
+                  left: MediaQuery.of(context).size.width * 0.25,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Text(
+                      '🚗 Tiempo estimado: $_tiempoEstimado',
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 30,
+                  left: 20,
+                  right: 20,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                     onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.location_on, color: Colors.white),
+                    label: const Text('VOLVER A LÍNEA DE TIEMPO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
                 ),
-              ),
-
-              Positioned(
-                top: 50,
-                left: MediaQuery.of(context).size.width * 0.25,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  child: Text(
-                    '🚗 Tiempo estimado: $_tiempoEstimado', 
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-
-              Positioned(
-                bottom: 30, left: 20, right: 20,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.location_on, color: Colors.white),
-                  label: const Text('VOLVER A LÍNEA DE TIEMPO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
     );
   }
 }
